@@ -200,6 +200,11 @@ struct SidebarView: View {
             .draggable(host.host)
             .contextMenu {
                 Button { onConnect?(host) } label: { Label("Connect", systemImage: "terminal") }
+                if !host.isWildcard {
+                    Button { TerminalService.sftpBrowse(to: host) } label: {
+                        Label("SFTP", systemImage: "folder.badge.gearshape")
+                    }
+                }
                 Button { onEdit?(host) } label: { Label("Edit", systemImage: "pencil") }
                 if !host.identityFile.isEmpty && !host.isWildcard {
                     Button { TerminalService.copyKeyToHost(host, keyPath: host.identityFile) } label: {

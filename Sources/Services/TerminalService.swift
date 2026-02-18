@@ -50,6 +50,31 @@ struct TerminalService {
         launchTerminal(shellCommand: cmd, using: terminal, customAppPath: customPath)
     }
 
+    /// Launch an interactive SFTP session to the host
+    static func sftpBrowse(to host: SSHHost) {
+        var cmd = "sftp"
+        if !host.identityFile.isEmpty {
+            cmd += " -i \(shellEscape(expandTilde(host.identityFile)))"
+        }
+        if let port = host.port, port != Self.defaultSSHPort {
+            cmd += " -P \(port)"
+        }
+        if !host.proxyJump.isEmpty {
+            cmd += " -J \(shellEscape(host.proxyJump))"
+        }
+        let target: String
+        if !host.user.isEmpty {
+            target = "\(host.user)@\(host.hostName)"
+        } else {
+            target = host.hostName
+        }
+        cmd += " \(shellEscape(target))"
+
+        let terminal = prefs.resolvedTerminal(for: host.host)
+        let customPath = prefs.resolvedCustomPath(for: host.host)
+        launchTerminal(shellCommand: cmd, using: terminal, customAppPath: customPath)
+    }
+
     /// Run ssh-copy-id to push a public key to the host
     static func copyKeyToHost(_ host: SSHHost, keyPath: String) {
         let fullPath = expandTilde(keyPath)
