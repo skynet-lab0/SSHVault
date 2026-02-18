@@ -14,6 +14,7 @@ struct ContentView: View {
     @State private var searchText = ""
     @State private var showingImport = false
     @State private var showingExport = false
+    @State private var showingAbout = false
     @State private var exportDocument: SSHConfigDocument?
 
     private var t: AppTheme { tm.current }
@@ -34,6 +35,7 @@ struct ContentView: View {
         .preferredColorScheme(t.isDark ? .dark : .light)
         .animation(.easeInOut(duration: 0.2), value: showRightPanel)
         .animation(.easeInOut(duration: 0.2), value: editingHost?.id)
+        .sheet(isPresented: $showingAbout) { AboutView() }
         .fileImporter(isPresented: $showingImport, allowedContentTypes: [.plainText, .data], allowsMultipleSelection: false) { handleImport($0) }
         .fileExporter(isPresented: $showingExport, document: exportDocument ?? SSHConfigDocument(content: ""), contentType: .plainText, defaultFilename: "ssh_config") { _ in exportDocument = nil }
     }
@@ -56,6 +58,8 @@ struct ContentView: View {
                     Button { exportDocument = SSHConfigDocument(content: configService.exportConfig()); showingExport = true } label: { Label("Export Config...", systemImage: "square.and.arrow.up") }
                     Divider()
                     Button { configService.load() } label: { Label("Reload Config", systemImage: "arrow.clockwise") }
+                    Divider()
+                    Button { showingAbout = true } label: { Label("About SSHMan", systemImage: "info.circle") }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                         .font(.system(size: 17))

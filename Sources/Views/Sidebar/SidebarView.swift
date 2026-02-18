@@ -57,23 +57,21 @@ struct SidebarView: View {
 
             Rectangle().fill(t.secondary.opacity(0.2)).frame(height: 0.5)
             HStack {
-                Menu {
-                    Button("New Group...") { showingAddGroup = true }
-                    Divider()
-                    Button("Reload Config") { configService.load() }
-                } label: {
+                Button { showingAddGroup = true } label: {
                     HStack(spacing: 4) {
-                        Image(systemName: "ellipsis.circle").font(.system(size: 12))
-                        Text("Actions").font(.system(size: 11))
+                        Image(systemName: "folder.badge.plus").font(.system(size: 12))
+                        Text("New Group").font(.system(size: 11))
                     }
                     .foregroundColor(t.secondary)
                 }
-                .menuStyle(.borderlessButton)
-                .frame(maxWidth: 90, alignment: .leading)
+                .buttonStyle(.plain)
                 Spacer()
                 Text("\(configService.hosts.count) host\(configService.hosts.count == 1 ? "" : "s")")
                     .font(.system(size: 10.5))
                     .foregroundColor(t.secondary.opacity(0.7))
+                Text("v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?")")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(t.secondary.opacity(0.4))
             }
             .padding(.horizontal, 16).padding(.vertical, 6)
         }
