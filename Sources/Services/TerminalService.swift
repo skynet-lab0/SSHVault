@@ -55,7 +55,10 @@ struct TerminalService {
     /// Uses the SSH config alias (host.host) so apps like Transmit can match it
     /// against ~/.ssh/config and inherit identity files, proxy settings, etc.
     static func openSFTP(to host: SSHHost) {
-        guard let encoded = host.host.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed),
+        // SSH config's Host directive uses space-separated patterns, so use
+        // the first token as the alias — it's always a valid match pattern.
+        let alias = host.host.split(separator: " ").first.map(String.init) ?? host.host
+        guard let encoded = alias.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed),
               let url = URL(string: "sftp://\(encoded)") else {
             logger.warning("Failed to build SFTP URL for \(host.displayName)")
             return
