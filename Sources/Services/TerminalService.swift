@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import os
 
@@ -48,6 +49,22 @@ struct TerminalService {
         let terminal = prefs.resolvedTerminal(for: host.host)
         let customPath = prefs.resolvedCustomPath(for: host.host)
         launchTerminal(shellCommand: cmd, using: terminal, customAppPath: customPath)
+    }
+
+    /// Open an SFTP connection in the system's preferred SFTP app via URL scheme
+    static func openSFTP(to host: SSHHost) {
+        let userPart = host.user.isEmpty ? "" : "\(host.user)@"
+        let portPart: String
+        if let port = host.port, port != Self.defaultSSHPort {
+            portPart = ":\(port)"
+        } else {
+            portPart = ""
+        }
+        guard let url = URL(string: "sftp://\(userPart)\(host.hostName)\(portPart)") else {
+            logger.warning("Failed to build SFTP URL for \(host.displayName)")
+            return
+        }
+        NSWorkspace.shared.open(url)
     }
 
     /// Launch an interactive SFTP session to the host

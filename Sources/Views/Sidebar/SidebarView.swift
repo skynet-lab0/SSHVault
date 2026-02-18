@@ -201,7 +201,7 @@ struct SidebarView: View {
             .contextMenu {
                 Button { onConnect?(host) } label: { Label("Connect", systemImage: "terminal") }
                 if !host.isWildcard {
-                    Button { TerminalService.sftpBrowse(to: host) } label: {
+                    Button { TerminalService.openSFTP(to: host) } label: {
                         Label("SFTP", systemImage: "folder.badge.gearshape")
                     }
                 }
