@@ -9,6 +9,7 @@ struct SSHKeyInfo: Identifiable, Hashable {
     let keyType: String
     let fingerprint: String
     let comment: String
+    var isLoadedInAgent: Bool = false
 
     var name: String { id }
     var hasPublicKey: Bool { publicKeyPath != nil }
@@ -52,6 +53,13 @@ final class SSHKeyService {
                 let publicPath = hasPub ? sshDir.appendingPathComponent(file + ".pub").path : nil
                 let info = getKeyInfo(name: file, privatePath: privatePath, publicPath: publicPath)
                 keys.append(info)
+            }
+        }
+
+        let loadedFingerprints = listAgentKeys()
+        for i in keys.indices {
+            if loadedFingerprints.contains(keys[i].fingerprint) {
+                keys[i].isLoadedInAgent = true
             }
         }
 
@@ -159,5 +167,119 @@ final class SSHKeyService {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(content.trimmingCharacters(in: .whitespacesAndNewlines), forType: .string)
         return true
+    }
+
+    // MARK: - SSH Agent
+
+    /// Check if ssh-agent is running and accessible
+    func isAgentRunning() -> Bool {
+        guard let sock = ProcessInfo.processInfo.environment["SSH_AUTH_SOCK"] else { return false }
+        return fm.fileExists(atPath: sock)
+    }
+
+    /// List fingerprints of keys currently loaded in the agent
+    func listAgentKeys() -> Set<String> {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/ssh-add")
+        process.arguments = ["-l"]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+            guard process.terminationStatus == 0 else { return [] }
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            guard let output = String(data: data, encoding: .utf8) else { return [] }
+            // Each line: "256 SHA256:xxx comment (ED25519)"
+            var fingerprints = Set<String>()
+            for line in output.components(separatedBy: "\n") {
+                let parts = line.components(separatedBy: " ")
+                if parts.count >= 2 && parts[1].hasPrefix("SHA256:") {
+                    fingerprints.insert(parts[1])
+                }
+            }
+            return fingerprints
+        } catch {
+            return []
+        }
+    }
+
+    /// Path to the askpass helper script used for passphrase prompts
+    private lazy var askPassScriptPath: String = {
+        let path = NSTemporaryDirectory() + "sshvault-askpass.sh"
+        let script = """
+        #!/bin/bash
+        exec osascript - "$1" <<'APPLESCRIPT'
+        on run argv
+            set promptText to item 1 of argv
+            display dialog promptText default answer "" with hidden answer buttons {"Cancel", "OK"} default button "OK" with title "SSHVault" with icon caution
+            return text returned of result
+        end run
+        APPLESCRIPT
+        """
+        try? script.write(toFile: path, atomically: true, encoding: .utf8)
+        try? fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path)
+        return path
+    }()
+
+    /// Add a key to the ssh-agent
+    func addKeyToAgent(keyPath: String) -> Bool {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/ssh-add")
+        process.arguments = ["--apple-use-keychain", keyPath]
+
+        var env = ProcessInfo.processInfo.environment
+        env["SSH_ASKPASS"] = askPassScriptPath
+        env["SSH_ASKPASS_REQUIRE"] = "prefer"
+        env["DISPLAY"] = ":0"
+        process.environment = env
+
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = Pipe()
+        process.standardError = Pipe()
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+            return process.terminationStatus == 0
+        } catch {
+            return false
+        }
+    }
+
+    /// Remove a specific key from the ssh-agent
+    func removeKeyFromAgent(keyPath: String) -> Bool {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/ssh-add")
+        process.arguments = ["-d", keyPath]
+        process.standardOutput = Pipe()
+        process.standardError = Pipe()
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+            return process.terminationStatus == 0
+        } catch {
+            return false
+        }
+    }
+
+    /// Remove all keys from the ssh-agent
+    func removeAllKeysFromAgent() -> Bool {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/ssh-add")
+        process.arguments = ["-D"]
+        process.standardOutput = Pipe()
+        process.standardError = Pipe()
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+            return process.terminationStatus == 0
+        } catch {
+            return false
+        }
     }
 }

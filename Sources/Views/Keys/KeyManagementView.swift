@@ -13,6 +13,7 @@ struct KeyManagementView: View {
     @State private var newKeyPassphrase = ""
     @State private var generationResult: String?
     @State private var copiedKeyID: String?
+    @State private var agentRunning: Bool = false
 
     private let keyService = SSHKeyService.shared
     private var t: AppTheme { tm.current }
@@ -42,6 +43,36 @@ struct KeyManagementView: View {
 
             Rectangle().fill(t.secondary.opacity(0.2)).frame(height: 0.5)
 
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(agentRunning ? t.green : t.secondary.opacity(0.4))
+                    .frame(width: 7, height: 7)
+                Text(agentRunning ? "ssh-agent running" : "ssh-agent not detected")
+                    .font(.system(size: 10.5))
+                    .foregroundColor(agentRunning ? t.green : t.secondary)
+                Spacer()
+                if agentRunning {
+                    let loadedCount = keys.filter(\.isLoadedInAgent).count
+                    Text("\(loadedCount) loaded")
+                        .font(.system(size: 10.5))
+                        .foregroundColor(t.secondary.opacity(0.7))
+                    if loadedCount > 0 {
+                        Button {
+                            _ = keyService.removeAllKeysFromAgent()
+                            refreshKeys()
+                        } label: {
+                            Text("Remove All")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(t.pink)
+                                .padding(.horizontal, 7).padding(.vertical, 2)
+                                .background(RoundedRectangle(cornerRadius: 4).fill(t.pink.opacity(0.1)))
+                        }.buttonStyle(.plain)
+                    }
+                }
+            }.padding(.horizontal, 16).padding(.vertical, 6)
+
+            Rectangle().fill(t.secondary.opacity(0.2)).frame(height: 0.5)
+
             if keys.isEmpty {
                 emptyState
             } else {
@@ -57,6 +88,11 @@ struct KeyManagementView: View {
                 Image(systemName: "folder").font(.system(size: 11)).foregroundColor(t.secondary.opacity(0.6))
                 Text("~/.ssh/").font(.system(size: 10.5, design: .monospaced)).foregroundColor(t.secondary.opacity(0.6))
                 Spacer()
+                if agentRunning {
+                    let agentCount = keys.filter(\.isLoadedInAgent).count
+                    Text("\(agentCount) in agent /")
+                        .font(.system(size: 10.5)).foregroundColor(t.secondary.opacity(0.7))
+                }
                 Text("\(keys.count) key\(keys.count == 1 ? "" : "s")")
                     .font(.system(size: 10.5)).foregroundColor(t.secondary.opacity(0.7))
             }.padding(.horizontal, 16).padding(.vertical, 6)
@@ -116,6 +152,37 @@ struct KeyManagementView: View {
                     .padding(.horizontal, 7).padding(.vertical, 3)
                     .background(Capsule().fill(t.cyan.opacity(0.1)))
                     .overlay(Capsule().strokeBorder(t.cyan.opacity(0.2), lineWidth: 0.5))
+                if agentRunning {
+                    if key.isLoadedInAgent {
+                        Text("In Agent")
+                            .font(.system(size: 9.5, weight: .bold, design: .monospaced))
+                            .foregroundColor(t.green)
+                            .padding(.horizontal, 7).padding(.vertical, 3)
+                            .background(Capsule().fill(t.green.opacity(0.1)))
+                            .overlay(Capsule().strokeBorder(t.green.opacity(0.2), lineWidth: 0.5))
+                        Button {
+                            _ = keyService.removeKeyFromAgent(keyPath: key.privateKeyPath)
+                            refreshKeys()
+                        } label: {
+                            Image(systemName: "minus.circle.fill")
+                                .font(.system(size: 14))
+                                .foregroundColor(t.pink.opacity(0.7))
+                        }.buttonStyle(.plain).help("Remove from agent")
+                    } else {
+                        Button {
+                            _ = keyService.addKeyToAgent(keyPath: key.privateKeyPath)
+                            refreshKeys()
+                        } label: {
+                            HStack(spacing: 3) {
+                                Image(systemName: "plus.circle").font(.system(size: 10))
+                                Text("Add to Agent").font(.system(size: 10, weight: .medium))
+                            }
+                            .foregroundColor(t.orange)
+                            .padding(.horizontal, 7).padding(.vertical, 3)
+                            .background(RoundedRectangle(cornerRadius: 5).fill(t.orange.opacity(0.1)))
+                        }.buttonStyle(.plain)
+                    }
+                }
                 if key.hasPublicKey {
                     Button {
                         if keyService.copyPublicKey(key) {
@@ -198,5 +265,8 @@ struct KeyManagementView: View {
             && trimmed.unicodeScalars.allSatisfy({ allowed.contains($0) })
     }
 
-    private func refreshKeys() { keys = keyService.listKeys() }
+    private func refreshKeys() {
+        agentRunning = keyService.isAgentRunning()
+        keys = keyService.listKeys()
+    }
 }
