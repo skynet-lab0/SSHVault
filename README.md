@@ -11,10 +11,17 @@ A native macOS SSH connection manager built with SwiftUI. Manage your `~/.ssh/co
 ### Host Management
 - **Visual SSH config editor** — reads and writes your `~/.ssh/config` directly
 - **Host tiles** in a responsive 3-column grid with hover interactions
+- **Custom display names** — set a friendly label separate from the SSH alias
+- **Custom icons** — assign SF Symbol icons to individual hosts
 - **Double-click to connect** — launches SSH in your preferred terminal
 - **Drag-and-drop grouping** — organize hosts into named groups
+- **SFTP support** — open SFTP in your system file manager from the context menu, with configurable initial paths
 - **Import / Export** — share or backup your SSH config
+- **Termius link import** — import hosts from `ssh://` links
 - **Automatic backups** — creates `~/.ssh/config.bak` before every save
+
+### Privacy
+- **IP masking toggle** — hide IP addresses / hostnames on host tiles with `***.***.***.***` (Settings > Display)
 
 ### SSH Key Management
 - **Key discovery** — scans `~/.ssh/` and displays all key pairs with fingerprints
@@ -30,17 +37,33 @@ A native macOS SSH connection manager built with SwiftUI. Manage your `~/.ssh/co
 - **Per-host overrides** — use a different terminal for specific hosts
 
 ### Theming
-10 built-in color schemes inspired by popular editor themes:
+43 built-in color schemes including daisyUI-inspired themes:
 
 | Dark | Light |
 |------|-------|
 | Dracula | GitHub Light |
 | One Dark | Solarized Light |
 | Tokyo Night | Catppuccin Latte |
-| Nord | |
-| Catppuccin Mocha | |
-| Gruvbox Dark | |
-| Rosé Pine | |
+| Nord | Light |
+| Catppuccin Mocha | Cupcake |
+| Gruvbox Dark | Bumblebee |
+| Rosé Pine | Emerald |
+| Synthwave | Corporate |
+| Halloween | Retro |
+| Forest | Cyberpunk |
+| Aqua | Valentine |
+| Luxury | Garden |
+| Dracula II | Lo-Fi |
+| Business | Pastel |
+| Night | Fantasy |
+| Coffee | CMYK |
+| Dim | Autumn |
+| Sunset | Acid |
+| Abyss | Lemonade |
+| Dark | Winter |
+| | Nord Light |
+| | Caramel Latte |
+| | Silk |
 
 Theme selection persists across sessions and updates the entire UI instantly.
 
@@ -50,7 +73,7 @@ SSHMan uses a Termius-inspired 3-column layout:
 
 ```
 ┌──────┬───────────────────────┬────────────────────┐
-│ [H]  │  Search: [_________]  │  Edit Host         │
+│ [H]  │  [+]  [Search____]    │  Edit Host         │
 │ [K]  │                       │                    │
 │ [S]  │  GROUP A         [+]  │  Host Alias        │
 │      │  ┌─────┐ ┌─────┐     │  HostName          │
@@ -61,7 +84,7 @@ SSHMan uses a Termius-inspired 3-column layout:
 │      │  ┌─────┐ ┌─────┐     │                    │
 │      │  │ dev │ │prod │     │  [Cancel] [Save]   │
 │      │  └─────┘ └─────┘     │                    │
-│ [:]  │  [+ Add Host]         │                    │
+│ [:]  │                       │                    │
 └──────┴───────────────────────┴────────────────────┘
   56px       flexible                ~380px
 ```
@@ -86,6 +109,14 @@ swift build
 swift run
 ```
 
+### Build .app Bundle & DMG
+
+```bash
+bash scripts/build-app.sh
+```
+
+This produces `build/SSHMan.app` and a versioned `build/SSHMan-vX.Y.Z.dmg` with a drag-to-Applications layout.
+
 No external dependencies — just SwiftUI and AppKit.
 
 ## Project Structure
@@ -93,23 +124,25 @@ No external dependencies — just SwiftUI and AppKit.
 ```
 Sources/
 ├── App.swift                    # App entry point & window config
-├── Theme.swift                  # Theme system (10 themes + ThemeManager)
+├── Theme.swift                  # Theme system (43 themes + ThemeManager)
 ├── Models/
-│   ├── SSHHost.swift            # SSH host model
+│   ├── SSHHost.swift            # SSH host model (label, icon, SFTP path)
 │   ├── SSHConfig.swift          # Bidirectional ~/.ssh/config parser
 │   ├── HostGroup.swift          # Host grouping with JSON persistence
-│   └── TerminalConfig.swift     # Terminal app preferences & overrides
+│   └── TerminalConfig.swift     # Terminal & display preferences
 ├── Services/
 │   ├── SSHConfigService.swift   # CRUD operations on SSH config
 │   ├── SSHKeyService.swift      # Key discovery, generation, clipboard
-│   └── GhosttyService.swift     # Terminal launch (all terminal types)
+│   └── TerminalService.swift    # Terminal launch & SFTP (all terminal types)
 └── Views/
     ├── ContentView.swift        # 3-column layout shell
-    ├── SettingsView.swift       # Theme picker & terminal preferences
+    ├── SettingsView.swift       # Theme picker, display & terminal preferences
+    ├── AboutView.swift          # About dialog with version & links
+    ├── TermiusImportView.swift  # Import hosts from ssh:// links
     ├── Sidebar/
     │   └── SidebarView.swift    # Host grid, groups, search, drag-drop
     ├── Hosts/
-    │   ├── HostRowView.swift    # Host tile card + Add Host tile
+    │   ├── HostRowView.swift    # Host tile card
     │   ├── HostFormView.swift   # Add/edit host form
     │   └── HostDetailView.swift # Host detail view
     └── Keys/
@@ -126,6 +159,7 @@ Sources/
 | Terminal overrides | `~/Library/Application Support/SSHMan/host_terminal_prefs.json` | JSON |
 | Theme preference | UserDefaults | String |
 | Default terminal | UserDefaults | String |
+| Display preferences | UserDefaults | Bool |
 
 ## SSH Config Directives
 
@@ -138,6 +172,15 @@ SSHMan parses and preserves these directives:
 - `IdentityFile` — path to private key
 - `ProxyJump` — bastion / jump host
 - `ForwardAgent` — agent forwarding toggle
+
+### SSHMan Metadata Comments
+
+SSHMan stores extra metadata as comments in your SSH config (ignored by SSH):
+
+- `# @label` — display name for the host tile
+- `# @icon` — SF Symbol name for the host icon
+- `# @sftppath` — initial directory for SFTP connections
+- `# @sshinitpath` — whether to use SSH init path for SFTP (`no` to disable)
 
 Any unrecognized directives are preserved as-is in "extra options" so your config is never mangled.
 
