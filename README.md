@@ -1,4 +1,4 @@
-# SSHMan
+# SSHVault
 
 A native macOS SSH connection manager built with SwiftUI. Manage your `~/.ssh/config` hosts, organize them into groups, generate SSH keys, and connect with your preferred terminal — all from a clean, themeable interface.
 
@@ -69,7 +69,7 @@ Theme selection persists across sessions and updates the entire UI instantly.
 
 ## Layout
 
-SSHMan uses a Termius-inspired 3-column layout:
+SSHVault uses a Termius-inspired 3-column layout:
 
 ```
 ┌──────┬───────────────────────┬────────────────────┐
@@ -99,8 +99,8 @@ SSHMan uses a Termius-inspired 3-column layout:
 
 ```bash
 # Clone
-git clone https://github.com/LZDevs/SSHMan.git
-cd SSHMan
+git clone https://github.com/LZDevs/SSHVault.git
+cd SSHVault
 
 # Build
 swift build
@@ -115,7 +115,7 @@ swift run
 bash scripts/build-app.sh
 ```
 
-This produces `build/SSHMan.app` and a versioned `build/SSHMan-vX.Y.Z.dmg` with a drag-to-Applications layout.
+This produces `build/SSHVault.app` and a versioned `build/SSHVault-vX.Y.Z.dmg` with a drag-to-Applications layout.
 
 No external dependencies — just SwiftUI and AppKit.
 
@@ -155,15 +155,15 @@ Sources/
 |------|----------|--------|
 | SSH hosts | `~/.ssh/config` | SSH config |
 | Config backup | `~/.ssh/config.bak` | SSH config |
-| Host groups | `~/Library/Application Support/SSHMan/groups.json` | JSON |
-| Terminal overrides | `~/Library/Application Support/SSHMan/host_terminal_prefs.json` | JSON |
+| Host groups | `~/Library/Application Support/SSHVault/groups.json` | JSON |
+| Terminal overrides | `~/Library/Application Support/SSHVault/host_terminal_prefs.json` | JSON |
 | Theme preference | UserDefaults | String |
 | Default terminal | UserDefaults | String |
 | Display preferences | UserDefaults | Bool |
 
 ## SSH Config Directives
 
-SSHMan parses and preserves these directives:
+SSHVault parses and preserves these directives:
 
 - `Host` — alias / pattern
 - `HostName` — server address
@@ -173,9 +173,9 @@ SSHMan parses and preserves these directives:
 - `ProxyJump` — bastion / jump host
 - `ForwardAgent` — agent forwarding toggle
 
-### SSHMan Metadata Comments
+### SSHVault Metadata Comments
 
-SSHMan stores extra metadata as comments in your SSH config (ignored by SSH):
+SSHVault stores extra metadata as comments in your SSH config (ignored by SSH):
 
 - `# @label` — display name for the host tile
 - `# @icon` — SF Symbol name for the host icon

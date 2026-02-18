@@ -1,22 +1,22 @@
 #!/bin/bash
-# Build SSHMan.app — a proper macOS .app bundle
+# Build SSHVault.app — a proper macOS .app bundle
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-APP_DIR="$PROJECT_DIR/build/SSHMan.app"
+APP_DIR="$PROJECT_DIR/build/SSHVault.app"
 
-echo "==> Building SSHMan release binary..."
+echo "==> Building SSHVault release binary..."
 cd "$PROJECT_DIR"
 swift build -c release
 
-echo "==> Assembling SSHMan.app bundle..."
+echo "==> Assembling SSHVault.app bundle..."
 rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR/Contents/MacOS"
 mkdir -p "$APP_DIR/Contents/Resources"
 
 # Copy binary
-cp "$PROJECT_DIR/.build/release/SSHMan" "$APP_DIR/Contents/MacOS/SSHMan"
+cp "$PROJECT_DIR/.build/release/SSHVault" "$APP_DIR/Contents/MacOS/SSHVault"
 
 # Copy Info.plist
 cp "$PROJECT_DIR/Resources/Info.plist" "$APP_DIR/Contents/Info.plist"
@@ -30,14 +30,14 @@ codesign --force --deep --sign - "$APP_DIR"
 
 # Extract version from Info.plist for DMG filename
 VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$APP_DIR/Contents/Info.plist")
-DMG_PATH="$PROJECT_DIR/build/SSHMan-v${VERSION}.dmg"
-DMG_RW="$PROJECT_DIR/build/SSHMan-rw.dmg"
-DMG_MOUNT="/tmp/sshman-dmg-$$"
+DMG_PATH="$PROJECT_DIR/build/SSHVault-v${VERSION}.dmg"
+DMG_RW="$PROJECT_DIR/build/SSHVault-rw.dmg"
+DMG_MOUNT="/tmp/sshvault-dmg-$$"
 echo "==> Creating DMG..."
 rm -f "$DMG_PATH" "$DMG_RW"
 
 # Create a writable DMG with unique mount point to avoid collisions
-hdiutil create -size 50m -fs HFS+ -volname "SSHMan" "$DMG_RW"
+hdiutil create -size 50m -fs HFS+ -volname "SSHVault" "$DMG_RW"
 mkdir -p "$DMG_MOUNT"
 DEVICE=$(hdiutil attach "$DMG_RW" -mountpoint "$DMG_MOUNT" -nobrowse | head -1 | awk '{print $1}')
 cp -R "$APP_DIR" "$DMG_MOUNT/"
@@ -59,7 +59,7 @@ on run argv
             set theViewOptions to icon view options of container window
             set arrangement of theViewOptions to not arranged
             set icon size of theViewOptions to 128
-            set position of item "SSHMan.app" of container window to {130, 140}
+            set position of item "SSHVault.app" of container window to {130, 140}
             set position of item "Applications" of container window to {390, 140}
             delay 1
             close
@@ -85,7 +85,7 @@ rm -f "$DMG_RW"
 
 echo ""
 echo "================================================"
-echo "  SSHMan.app built successfully!"
+echo "  SSHVault.app built successfully!"
 echo ""
 echo "  App:  $APP_DIR"
 echo "  DMG:  $DMG_PATH"

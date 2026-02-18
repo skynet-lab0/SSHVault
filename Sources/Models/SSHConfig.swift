@@ -40,7 +40,7 @@ struct SSHConfig {
                     hosts.append(host)
                 }
                 currentHost = SSHHost(host: sanitizeAlias(parts.value))
-                // Extract SSHMan metadata tags from comments
+                // Extract SSHVault metadata tags from comments
                 let commentLines = pendingComment.components(separatedBy: "\n")
                 var userComments: [String] = []
                 for line in commentLines {
@@ -167,7 +167,7 @@ struct SSHConfig {
                 lines.append("")
             }
 
-            // Write SSHMan metadata tags
+            // Write SSHVault metadata tags
             if !host.label.isEmpty {
                 lines.append("# @label \(host.label)")
             }

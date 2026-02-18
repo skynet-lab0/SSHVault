@@ -55,7 +55,7 @@ final class TerminalPreferences: ObservableObject {
         guard let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
             fatalError("Application Support directory unavailable")
         }
-        let url = base.appendingPathComponent("SSHMan", isDirectory: true)
+        let url = base.appendingPathComponent("SSHVault", isDirectory: true)
         try? FileManager.default.createDirectory(
             at: url, withIntermediateDirectories: true,
             attributes: [.posixPermissions: 0o700]

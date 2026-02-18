@@ -74,7 +74,7 @@ struct ContentView: View {
                     Divider()
                     Button { configService.load() } label: { Label("Reload Config", systemImage: "arrow.clockwise") }
                     Divider()
-                    Button { showingAbout = true } label: { Label("About SSHMan", systemImage: "info.circle") }
+                    Button { showingAbout = true } label: { Label("About SSHVault", systemImage: "info.circle") }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                         .font(.system(size: 17))

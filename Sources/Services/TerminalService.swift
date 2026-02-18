@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 import os
 
-private let logger = Logger(subsystem: "com.lzdevs.sshman", category: "terminal")
+private let logger = Logger(subsystem: "com.lzdevs.sshvault", category: "terminal")
 
 /// Launches SSH connections in configurable terminal applications
 struct TerminalService {

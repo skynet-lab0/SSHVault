@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 
 @main
-struct SSHManApp: App {
+struct SSHVaultApp: App {
     @StateObject private var configService = SSHConfigService()
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 

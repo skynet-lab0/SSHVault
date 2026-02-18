@@ -1,5 +1,5 @@
 #!/bin/bash
-# Generates AppIcon.icns for SSHMan
+# Generates AppIcon.icns for SSHVault
 # Uses Swift + CoreGraphics (always available on macOS) to draw the icon
 
 set -euo pipefail

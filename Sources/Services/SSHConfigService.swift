@@ -2,7 +2,7 @@ import Foundation
 import SwiftUI
 import os
 
-private let logger = Logger(subsystem: "com.lzdevs.sshman", category: "config")
+private let logger = Logger(subsystem: "com.lzdevs.sshvault", category: "config")
 
 /// Manages reading and writing ~/.ssh/config
 final class SSHConfigService: ObservableObject {

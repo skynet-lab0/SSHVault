@@ -3,13 +3,13 @@
 import PackageDescription
 
 let package = Package(
-    name: "SSHMan",
+    name: "SSHVault",
     platforms: [
         .macOS(.v13)
     ],
     targets: [
         .executableTarget(
-            name: "SSHMan",
+            name: "SSHVault",
             path: "Sources"
         )
     ]

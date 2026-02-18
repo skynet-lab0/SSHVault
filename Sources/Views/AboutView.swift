@@ -17,7 +17,7 @@ struct AboutView: View {
                 .font(.system(size: 44, weight: .thin))
                 .foregroundColor(t.accent)
 
-            Text("SSHMan")
+            Text("SSHVault")
                 .font(.system(size: 22, weight: .bold))
                 .foregroundColor(t.foreground)
 
@@ -34,9 +34,9 @@ struct AboutView: View {
             Divider().padding(.horizontal, 30)
 
             VStack(spacing: 8) {
-                linkRow(label: "GitHub", url: "https://github.com/LZDevs/SSHMan", icon: "chevron.left.forwardslash.chevron.right")
-                linkRow(label: "Releases", url: "https://github.com/LZDevs/SSHMan/releases", icon: "arrow.down.circle")
-                linkRow(label: "Report Issue", url: "https://github.com/LZDevs/SSHMan/issues", icon: "exclamationmark.bubble")
+                linkRow(label: "GitHub", url: "https://github.com/LZDevs/SSHVault", icon: "chevron.left.forwardslash.chevron.right")
+                linkRow(label: "Releases", url: "https://github.com/LZDevs/SSHVault/releases", icon: "arrow.down.circle")
+                linkRow(label: "Report Issue", url: "https://github.com/LZDevs/SSHVault/issues", icon: "exclamationmark.bubble")
             }
 
             Divider().padding(.horizontal, 30)
