@@ -6,6 +6,10 @@ A native macOS SSH connection manager built with SwiftUI. Manage your `~/.ssh/co
 ![Swift 5.9](https://img.shields.io/badge/Swift-5.9-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
+![Hosts](screenshots/hosts.png)
+![Keys](screenshots/keys.png)
+![Settings](screenshots/settings.png)
+
 ## Features
 
 ### Host Management
