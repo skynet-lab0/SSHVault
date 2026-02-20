@@ -2,11 +2,12 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 enum NavSection: Hashable {
-    case hosts, keys, settings
+    case hosts, keys, settings, remotes
 }
 
 struct ContentView: View {
     @EnvironmentObject var configService: SSHConfigService
+    @EnvironmentObject var remoteSession: RemoteSessionService
     @ObservedObject private var tm = ThemeManager.shared
     @State private var selectedNav: NavSection = .hosts
     @State private var editingHost: SSHHost?
@@ -21,7 +22,12 @@ struct ContentView: View {
     @State private var exportDocument: SSHConfigDocument?
 
     private var t: AppTheme { tm.current }
-    private var showRightPanel: Bool { editingHost != nil || showingAddHost }
+    private var showRightPanel: Bool {
+        if selectedNav == .remotes {
+            return remoteSession.editingHost != nil || remoteSession.showingAddHost
+        }
+        return editingHost != nil || showingAddHost
+    }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -38,6 +44,7 @@ struct ContentView: View {
         .preferredColorScheme(t.isDark ? .dark : .light)
         .animation(.easeInOut(duration: 0.2), value: showRightPanel)
         .animation(.easeInOut(duration: 0.2), value: editingHost?.id)
+        .onAppear { remoteSession.configure(configService: configService) }
         .sheet(isPresented: $showingTermiusImport) { TermiusImportView() }
         .sheet(isPresented: $showingAbout) { AboutView() }
         .fileImporter(isPresented: $showingImport, allowedContentTypes: [.plainText, .data], allowsMultipleSelection: false) { handleImport($0) }
@@ -51,6 +58,7 @@ struct ContentView: View {
             Spacer().frame(height: 12)
             VStack(spacing: 4) {
                 railButton(.hosts, icon: "server.rack", label: "Hosts")
+                railButton(.remotes, icon: "network", label: "Remotes")
                 railButton(.keys, icon: "key.fill", label: "Keys")
                 railButton(.settings, icon: "gearshape", label: "Settings")
             }
@@ -118,6 +126,8 @@ struct ContentView: View {
             SidebarView(searchText: $searchText, showingAddHost: $showingAddHost, addHostGroupID: $addHostGroupID,
                          onEdit: { showingAddHost = false; editingHost = $0 },
                          onConnect: { TerminalService.connect(to: $0) })
+        case .remotes:
+            RemotesView(remoteSession: remoteSession)
         case .keys: KeyManagementView(isInline: true)
         case .settings: SettingsView(isInline: true)
         }
@@ -125,6 +135,18 @@ struct ContentView: View {
 
     @ViewBuilder
     private var rightPanel: some View {
+        Group {
+            if selectedNav == .remotes {
+                remoteRightPanel
+            } else {
+                localRightPanel
+            }
+        }
+        .background(t.background)
+    }
+
+    @ViewBuilder
+    private var localRightPanel: some View {
         Group {
             if showingAddHost {
                 HostFormView(mode: .add, groups: configService.groups, initialGroupID: addHostGroupID) { host, groupID in
@@ -147,7 +169,38 @@ struct ContentView: View {
                 }
             }
         }
-        .background(t.background)
+    }
+
+    @ViewBuilder
+    private var remoteRightPanel: some View {
+        Group {
+            if remoteSession.showingAddHost {
+                HostFormView(mode: .add, groups: remoteSession.groups, initialGroupID: nil) { host, groupID in
+                    remoteSession.addHost(host)
+                    assignRemoteHost(host, toGroup: groupID)
+                    remoteSession.showingAddHost = false
+                } onCancel: {
+                    remoteSession.showingAddHost = false
+                }
+            } else if let host = remoteSession.editingHost {
+                let currentGroupID = remoteSession.groups.first { $0.hostIDs.contains(host.host) }?.id
+                HostFormView(mode: .edit(host), groups: remoteSession.groups, initialGroupID: currentGroupID) { updatedHost, groupID in
+                    remoteSession.updateHost(updatedHost)
+                    assignRemoteHost(updatedHost, toGroup: groupID)
+                    remoteSession.editingHost = nil
+                } onCancel: {
+                    remoteSession.editingHost = nil
+                }
+            }
+        }
+    }
+
+    private func assignRemoteHost(_ host: SSHHost, toGroup groupID: UUID?) {
+        remoteSession.removeHostFromGroups(host)
+        if let groupID, let idx = remoteSession.groups.firstIndex(where: { $0.id == groupID }) {
+            remoteSession.groups[idx].hostIDs.append(host.host)
+        }
+        remoteSession.saveRemoteGroups()
     }
 
     private func assignHost(_ host: SSHHost, toGroup groupID: UUID?) {

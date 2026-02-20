@@ -29,8 +29,12 @@ struct HostGroup: Identifiable, Codable, Hashable {
     static let storageURL = supportDir.appendingPathComponent("groups.json")
 
     static func loadAll() -> [HostGroup] {
-        guard FileManager.default.fileExists(atPath: storageURL.path),
-              let data = try? Data(contentsOf: storageURL),
+        loadAll(from: storageURL)
+    }
+
+    static func loadAll(from url: URL) -> [HostGroup] {
+        guard FileManager.default.fileExists(atPath: url.path),
+              let data = try? Data(contentsOf: url),
               let groups = try? JSONDecoder().decode([HostGroup].self, from: data) else {
             return []
         }
@@ -38,10 +42,14 @@ struct HostGroup: Identifiable, Codable, Hashable {
     }
 
     static func saveAll(_ groups: [HostGroup]) {
+        saveAll(groups, to: storageURL)
+    }
+
+    static func saveAll(_ groups: [HostGroup], to url: URL) {
         guard let data = try? JSONEncoder().encode(groups) else { return }
         do {
-            try data.write(to: storageURL, options: .atomic)
-            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: storageURL.path)
+            try data.write(to: url, options: .atomic)
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
         } catch {
             logger.error("Failed to save groups: \(error.localizedDescription, privacy: .private)")
         }

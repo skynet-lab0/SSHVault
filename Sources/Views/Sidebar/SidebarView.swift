@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct SidebarView: View {
     @EnvironmentObject var configService: SSHConfigService
@@ -17,6 +18,7 @@ struct SidebarView: View {
     @State private var renameGroupName = ""
     @State private var groupToDelete: HostGroup?
     @State private var showDeleteGroupConfirm = false
+    @State private var selectedHostIDs: Set<UUID> = []
 
     private var t: AppTheme { tm.current }
 
@@ -257,8 +259,15 @@ struct SidebarView: View {
     // MARK: - Host Tile
 
     private func hostTile(_ host: SSHHost) -> some View {
-        HostRowView(host: host, onEdit: { onEdit?(host) }, onConnect: { onConnect?(host) })
+        let isSelected = selectedHostIDs.contains(host.id)
+        let contextMenuTargets: [SSHHost] = isSelected
+            ? configService.hosts.filter { selectedHostIDs.contains($0.id) }
+            : [host]
+
+        return HostRowView(host: host, isSelected: isSelected, onEdit: { onEdit?(host) }, onConnect: { onConnect?(host) })
+            .modifier(HostTileClickModifier(hostID: host.id, selectedHostIDs: $selectedHostIDs, onDoubleClick: { onConnect?(host) }))
             .draggable(host.host)
+            .help("Click to select, ⌘/Ctrl+click to multi-select, double-click to connect")
             .contextMenu {
                 Button { onConnect?(host) } label: { Label("Connect", systemImage: "terminal") }
                 if !host.isWildcard {
@@ -274,10 +283,18 @@ struct SidebarView: View {
                 }
                 Divider()
                 if !configService.groups.isEmpty {
-                    Menu("Move to Group") {
-                        ForEach(configService.groups) { g in Button(g.name) { moveHost(host, to: g) } }
+                    Menu(contextMenuTargets.count > 1 ? "Move to Group (\(contextMenuTargets.count) hosts)" : "Move to Group") {
+                        ForEach(configService.groups) { g in
+                            Button(g.name) {
+                                for target in contextMenuTargets { moveHost(target, to: g) }
+                                selectedHostIDs.removeAll()
+                            }
+                        }
                         Divider()
-                        Button("Remove from Group") { removeHostFromGroups(host) }
+                        Button("Remove from Group") {
+                            for target in contextMenuTargets { removeHostFromGroups(target) }
+                            selectedHostIDs.removeAll()
+                        }
                     }
                 }
                 Divider()
@@ -311,5 +328,70 @@ struct SidebarView: View {
     func removeHostFromGroups(_ host: SSHHost) {
         for i in configService.groups.indices { configService.groups[i].hostIDs.removeAll { $0 == host.host } }
         configService.saveGroups()
+    }
+}
+
+// MARK: - Multi-select click capture (Cmd/Ctrl+click)
+
+struct HostTileClickModifier: ViewModifier {
+    let hostID: UUID
+    @Binding var selectedHostIDs: Set<UUID>
+    let onDoubleClick: () -> Void
+
+    func body(content: Content) -> some View {
+        content.overlay(
+            MacClickCaptureView(
+                onSingleClick: { flags in
+                    if flags.contains(.command) || flags.contains(.control) {
+                        if selectedHostIDs.contains(hostID) {
+                            selectedHostIDs.remove(hostID)
+                        } else {
+                            selectedHostIDs.insert(hostID)
+                        }
+                    } else {
+                        selectedHostIDs = [hostID]
+                    }
+                },
+                onDoubleClick: onDoubleClick
+            )
+            .allowsHitTesting(true)
+        )
+    }
+}
+
+struct MacClickCaptureView: NSViewRepresentable {
+    var onSingleClick: (NSEvent.ModifierFlags) -> Void
+    var onDoubleClick: () -> Void
+
+    func makeNSView(context: Context) -> ClickCaptureNSView {
+        let v = ClickCaptureNSView()
+        v.onSingleClick = onSingleClick
+        v.onDoubleClick = onDoubleClick
+        return v
+    }
+
+    func updateNSView(_ nsView: ClickCaptureNSView, context: Context) {
+        nsView.onSingleClick = onSingleClick
+        nsView.onDoubleClick = onDoubleClick
+    }
+
+    class ClickCaptureNSView: NSView {
+        var onSingleClick: ((NSEvent.ModifierFlags) -> Void)?
+        var onDoubleClick: (() -> Void)?
+
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            if trackingAreas.isEmpty {
+                addTrackingArea(NSTrackingArea(rect: bounds, options: [.activeAlways, .mouseEnteredAndExited, .inVisibleRect], owner: self, userInfo: nil))
+            }
+        }
+
+        override func mouseDown(with event: NSEvent) {
+            if event.clickCount == 2 {
+                onDoubleClick?()
+            } else if event.clickCount == 1 {
+                onSingleClick?(event.modifierFlags)
+            }
+        }
     }
 }

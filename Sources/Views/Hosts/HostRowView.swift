@@ -2,6 +2,7 @@ import SwiftUI
 
 struct HostRowView: View {
     let host: SSHHost
+    var isSelected: Bool = false
     var onEdit: (() -> Void)?
     var onConnect: (() -> Void)?
 
@@ -63,23 +64,16 @@ struct HostRowView: View {
             RoundedRectangle(cornerRadius: 9)
                 .fill(isHovered
                     ? t.surface.opacity(0.9)
-                    : t.surface.opacity(0.6))
+                    : (isSelected ? t.accent.opacity(0.2) : t.surface.opacity(0.6)))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 9)
                 .strokeBorder(
-                    isHovered
-                        ? t.accent.opacity(0.4)
-                        : t.secondary.opacity(0.2),
-                    lineWidth: 0.5
+                    isSelected ? t.accent : (isHovered ? t.accent.opacity(0.4) : t.secondary.opacity(0.2)),
+                    lineWidth: isSelected ? 2 : 0.5
                 )
         )
         .contentShape(Rectangle())
-        .simultaneousGesture(
-            TapGesture(count: 2).onEnded {
-                onConnect?()
-            }
-        )
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.15)) {
                 isHovered = hovering
@@ -87,7 +81,7 @@ struct HostRowView: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("SSH Host \(host.displayName)")
-        .accessibilityHint("Double click to connect")
+        .accessibilityHint("Double click to connect. Hold Command or Control and click to multi-select.")
         .accessibilityAction(.default) { onConnect?() }
     }
 

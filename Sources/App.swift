@@ -4,12 +4,14 @@ import AppKit
 @main
 struct SSHVaultApp: App {
     @StateObject private var configService = SSHConfigService()
+    @StateObject private var remoteSession = RemoteSessionService()
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environmentObject(configService)
+                .environmentObject(remoteSession)
                 .frame(minWidth: 850, minHeight: 450)
         }
         .windowStyle(.titleBar)

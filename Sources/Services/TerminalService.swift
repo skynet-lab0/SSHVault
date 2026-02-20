@@ -47,7 +47,8 @@ struct TerminalService {
         cmd += " \(shellEscape(target))"
 
         if host.sshInitPath && !host.sftpPath.isEmpty {
-            cmd += " -t \(shellEscape("cd \(host.sftpPath) && exec $SHELL -l"))"
+            let safePath = shellEscape(host.sftpPath)
+            cmd += " -t \(shellEscape("cd \(safePath) && exec $SHELL -l"))"
         }
 
         let terminal = prefs.resolvedTerminal(for: host.host)
@@ -89,6 +90,35 @@ struct TerminalService {
 
         let terminal = prefs.resolvedTerminal(for: host.host)
         let customPath = prefs.resolvedCustomPath(for: host.host)
+        launchTerminal(shellCommand: cmd, using: terminal, customAppPath: customPath)
+    }
+
+    /// SSH to remoteHost and run `ssh -t hostAliasOnRemote` there (for managing remote's config).
+    static func connectToHostOnRemote(remoteHost: SSHHost, hostAliasOnRemote: String) {
+        var cmd = "ssh"
+        if !remoteHost.identityFile.isEmpty {
+            cmd += " -i \(shellEscape(expandTilde(remoteHost.identityFile)))"
+        }
+        if let port = remoteHost.port, port != Self.defaultSSHPort {
+            cmd += " -p \(port)"
+        }
+        if remoteHost.forwardAgent {
+            cmd += " -A"
+        }
+        if !remoteHost.proxyJump.isEmpty {
+            cmd += " -J \(shellEscape(remoteHost.proxyJump))"
+        }
+        let target: String
+        if !remoteHost.user.isEmpty {
+            target = "\(remoteHost.user)@\(remoteHost.hostName)"
+        } else {
+            target = remoteHost.hostName
+        }
+        let innerCmd = "ssh -t \(hostAliasOnRemote.shellEscaped)"
+        cmd += " -t \(shellEscape(target)) \(shellEscape(innerCmd))"
+
+        let terminal = prefs.resolvedTerminal(for: remoteHost.host)
+        let customPath = prefs.resolvedCustomPath(for: remoteHost.host)
         launchTerminal(shellCommand: cmd, using: terminal, customAppPath: customPath)
     }
 
