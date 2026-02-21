@@ -28,14 +28,20 @@ struct SidebarView: View {
         GridItem(.flexible(), spacing: 8)
     ]
 
+    private var sortedGroups: [HostGroup] {
+        configService.groups.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
     var filteredHosts: [SSHHost] {
-        if searchText.isEmpty { return configService.hosts }
-        let query = searchText.lowercased()
-        return configService.hosts.filter {
-            $0.host.lowercased().contains(query) ||
-            $0.hostName.lowercased().contains(query) ||
-            $0.user.lowercased().contains(query)
-        }
+        let base = searchText.isEmpty
+            ? configService.hosts
+            : configService.hosts.filter {
+                let q = searchText.lowercased()
+                return $0.host.lowercased().contains(q) ||
+                    $0.hostName.lowercased().contains(q) ||
+                    $0.user.lowercased().contains(q)
+              }
+        return base.sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
     }
 
     var body: some View {
@@ -180,7 +186,7 @@ struct SidebarView: View {
 
     @ViewBuilder
     private var groupedSections: some View {
-        ForEach(configService.groups) { group in
+        ForEach(sortedGroups) { group in
             let groupHosts = filteredHosts.filter { group.hostIDs.contains($0.host) }
             if !groupHosts.isEmpty || searchText.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
@@ -195,11 +201,11 @@ struct SidebarView: View {
                             Button { configService.moveGroupUp(group) } label: {
                                 Label("Move Up", systemImage: "arrow.up")
                             }
-                            .disabled(configService.groups.first?.id == group.id)
+                            .disabled(sortedGroups.first?.id == group.id)
                             Button { configService.moveGroupDown(group) } label: {
                                 Label("Move Down", systemImage: "arrow.down")
                             }
-                            .disabled(configService.groups.last?.id == group.id)
+                            .disabled(sortedGroups.last?.id == group.id)
                             Divider()
                             Button(role: .destructive) {
                                 groupToDelete = group; showDeleteGroupConfirm = true
@@ -284,7 +290,7 @@ struct SidebarView: View {
                 Divider()
                 if !configService.groups.isEmpty {
                     Menu(contextMenuTargets.count > 1 ? "Move to Group (\(contextMenuTargets.count) hosts)" : "Move to Group") {
-                        ForEach(configService.groups) { g in
+                        ForEach(sortedGroups) { g in
                             Button(g.name) {
                                 for target in contextMenuTargets { moveHost(target, to: g) }
                                 selectedHostIDs.removeAll()

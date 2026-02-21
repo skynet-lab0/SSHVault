@@ -111,14 +111,20 @@ struct RemoteDetailView: View {
         .padding(.vertical, 10)
     }
 
+    private var sortedGroups: [HostGroup] {
+        remoteSession.groups.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
     private var filteredHosts: [SSHHost] {
-        if searchText.isEmpty { return remoteSession.hosts }
-        let q = searchText.lowercased()
-        return remoteSession.hosts.filter {
-            $0.host.lowercased().contains(q) ||
-            $0.hostName.lowercased().contains(q) ||
-            $0.user.lowercased().contains(q)
-        }
+        let base = searchText.isEmpty
+            ? remoteSession.hosts
+            : remoteSession.hosts.filter {
+                let q = searchText.lowercased()
+                return $0.host.lowercased().contains(q) ||
+                    $0.hostName.lowercased().contains(q) ||
+                    $0.user.lowercased().contains(q)
+              }
+        return base.sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
     }
 
     private var ungroupedHosts: [SSHHost] {
@@ -214,7 +220,7 @@ struct RemoteDetailView: View {
 
     @ViewBuilder
     private var remoteGroupedSections: some View {
-        ForEach(remoteSession.groups) { group in
+        ForEach(sortedGroups) { group in
             let groupHosts = filteredHosts.filter { group.hostIDs.contains($0.host) }
             if !groupHosts.isEmpty || searchText.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
@@ -279,9 +285,9 @@ struct RemoteDetailView: View {
                 Button { renameGroupName = group.name; groupToRename = group } label: { Label("Rename", systemImage: "pencil") }
                 Divider()
                 Button { remoteSession.moveGroupUp(group) } label: { Label("Move Up", systemImage: "arrow.up") }
-                    .disabled(remoteSession.groups.first?.id == group.id)
+                    .disabled(sortedGroups.first?.id == group.id)
                 Button { remoteSession.moveGroupDown(group) } label: { Label("Move Down", systemImage: "arrow.down") }
-                    .disabled(remoteSession.groups.last?.id == group.id)
+                    .disabled(sortedGroups.last?.id == group.id)
                 Divider()
                 Button(role: .destructive) { groupToDelete = group; showDeleteGroupConfirm = true } label: { Label("Delete Group", systemImage: "trash") }
             }
@@ -303,7 +309,7 @@ struct RemoteDetailView: View {
                 Divider()
                 if !remoteSession.groups.isEmpty {
                     Menu(contextMenuTargets.count > 1 ? "Move to Group (\(contextMenuTargets.count) hosts)" : "Move to Group") {
-                        ForEach(remoteSession.groups) { g in
+                        ForEach(sortedGroups) { g in
                             Button(g.name) {
                                 for target in contextMenuTargets { remoteSession.moveHost(target, to: g) }
                                 selectedHostIDs.removeAll()
@@ -327,6 +333,10 @@ struct RemoteDetailView: View {
         TerminalService.connectToHostOnRemote(remoteHost: sshHost, hostAliasOnRemote: host.host)
     }
 
+    private var sortedKeys: [SSHKeyInfo] {
+        remoteSession.keys.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
     private var keysContent: some View {
         ScrollView {
             VStack(spacing: 8) {
@@ -343,7 +353,7 @@ struct RemoteDetailView: View {
                     }
                     .frame(maxWidth: .infinity)
                 } else {
-                    ForEach(remoteSession.keys) { key in remoteKeyCard(key) }
+                    ForEach(sortedKeys) { key in remoteKeyCard(key) }
                 }
             }
             .padding(16)

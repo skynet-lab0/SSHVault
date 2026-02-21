@@ -72,7 +72,7 @@ struct ContentView: View {
                         Menu {
                             Button { importGroupID = nil; showingImport = true } label: { Text("No Group") }
                             Divider()
-                            ForEach(configService.groups) { group in
+                            ForEach(configService.groups.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }) { group in
                                 Button { importGroupID = group.id; showingImport = true } label: { Text(group.name) }
                             }
                         } label: { Label("Import Config...", systemImage: "square.and.arrow.down") }

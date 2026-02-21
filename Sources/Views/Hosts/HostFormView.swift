@@ -123,7 +123,7 @@ struct HostFormView: View {
                                     .foregroundColor(t.secondary)
                                 Picker("", selection: $selectedGroupID) {
                                     Text("None").tag(UUID?.none)
-                                    ForEach(groups) { group in
+                                    ForEach(groups.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }) { group in
                                         Text(group.name).tag(UUID?.some(group.id))
                                     }
                                 }

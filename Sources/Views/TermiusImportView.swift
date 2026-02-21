@@ -47,7 +47,7 @@ struct TermiusImportView: View {
                             .foregroundColor(t.secondary)
                         Picker("", selection: $selectedGroupID) {
                             Text("None").tag(UUID?.none)
-                            ForEach(configService.groups) { group in
+                            ForEach(configService.groups.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }) { group in
                                 Text(group.name).tag(UUID?.some(group.id))
                             }
                         }
