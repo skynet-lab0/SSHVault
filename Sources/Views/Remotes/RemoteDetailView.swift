@@ -2,6 +2,7 @@ import SwiftUI
 import AppKit
 
 struct RemoteDetailView: View {
+    @EnvironmentObject var hostClipboard: HostClipboardService
     @ObservedObject var remoteSession: RemoteSessionService
     var onClose: () -> Void
     @ObservedObject private var tm = ThemeManager.shared
@@ -10,7 +11,7 @@ struct RemoteDetailView: View {
     @State private var searchText = ""
     @State private var showingAddGroup = false
     @State private var newGroupName = ""
-    @State private var hostToDelete: SSHHost?
+    @State private var hostsToDelete: [SSHHost] = []
     @State private var showDeleteConfirm = false
     @State private var groupToRename: HostGroup?
     @State private var renameGroupName = ""
@@ -47,6 +48,7 @@ struct RemoteDetailView: View {
             }
         }
         .background(t.background)
+        .overlay { if selectedSegment == 0 { hostListKeyboardShortcuts } else { EmptyView() } }
         .alert("New Group", isPresented: $showingAddGroup) {
             TextField("Group name", text: $newGroupName)
             Button("Cancel", role: .cancel) { newGroupName = "" }
@@ -80,14 +82,18 @@ struct RemoteDetailView: View {
                 Text("Delete \"\(group.name)\"? Hosts will become ungrouped.")
             }
         }
-        .alert("Delete Host?", isPresented: $showDeleteConfirm) {
-            Button("Cancel", role: .cancel) {}
+        .alert(hostsToDelete.count > 1 ? "Delete \(hostsToDelete.count) Hosts?" : "Delete Host?", isPresented: $showDeleteConfirm) {
+            Button("Cancel", role: .cancel) { hostsToDelete = [] }
             Button("Delete", role: .destructive) {
-                if let host = hostToDelete { remoteSession.deleteHost(host) }
+                for host in hostsToDelete { remoteSession.deleteHost(host) }
+                hostsToDelete = []
+                selectedHostIDs.removeAll()
             }
         } message: {
-            if let host = hostToDelete {
+            if hostsToDelete.count == 1, let host = hostsToDelete.first {
                 Text("Delete \"\(host.displayName)\" on the remote?")
+            } else if hostsToDelete.count > 1 {
+                Text("Delete \(hostsToDelete.count) hosts on the remote?")
             }
         }
     }
@@ -306,6 +312,20 @@ struct RemoteDetailView: View {
             .contextMenu {
                 Button { connectToHostOnRemote(host) } label: { Label("Connect", systemImage: "terminal") }
                 Button { remoteSession.editingHost = host } label: { Label("Edit", systemImage: "pencil") }
+                if !host.isWildcard {
+                    Button { duplicateRemoteHost(host) } label: { Label("Duplicate", systemImage: "doc.on.doc") }
+                }
+                let copyTargets = contextMenuTargets.filter { !$0.isWildcard }
+                if !copyTargets.isEmpty {
+                    Button { hostClipboard.copy(copyTargets) } label: {
+                        Label(copyTargets.count > 1 ? "Copy (\(copyTargets.count) hosts)" : "Copy", systemImage: "doc.on.clipboard")
+                    }
+                }
+                if hostClipboard.hasContent {
+                    Button { pasteToRemote(ontoGroupOf: host) } label: {
+                        Label(hostClipboard.hosts.count > 1 ? "Paste (\(hostClipboard.hosts.count) hosts)" : "Paste", systemImage: "doc.on.clipboard.fill")
+                    }
+                }
                 Divider()
                 if !remoteSession.groups.isEmpty {
                     Menu(contextMenuTargets.count > 1 ? "Move to Group (\(contextMenuTargets.count) hosts)" : "Move to Group") {
@@ -323,7 +343,12 @@ struct RemoteDetailView: View {
                     }
                 }
                 Divider()
-                Button(role: .destructive) { hostToDelete = host; showDeleteConfirm = true } label: { Label("Delete", systemImage: "trash") }
+                Button(role: .destructive) {
+                    hostsToDelete = contextMenuTargets
+                    showDeleteConfirm = true
+                } label: {
+                    Label(contextMenuTargets.count > 1 ? "Delete (\(contextMenuTargets.count) hosts)" : "Delete", systemImage: "trash")
+                }
             }
     }
 
@@ -331,6 +356,93 @@ struct RemoteDetailView: View {
         guard let target = remoteSession.currentRemote,
               let sshHost = remoteSession.resolveHost(for: target) else { return }
         TerminalService.connectToHostOnRemote(remoteHost: sshHost, hostAliasOnRemote: host.host)
+    }
+
+    private func duplicateRemoteHost(_ host: SSHHost) {
+        guard !host.isWildcard else { return }
+        let taken = Set(remoteSession.hosts.map(\.host))
+        var alias = host.host.isEmpty ? "copy" : host.host + "-copy"
+        var counter = 2
+        while taken.contains(alias) {
+            alias = (host.host.isEmpty ? "copy" : host.host + "-copy") + "-\(counter)"
+            counter += 1
+        }
+        let copy = SSHHost(
+            id: UUID(),
+            host: SSHConfig.sanitizeAlias(alias),
+            label: host.label.isEmpty ? alias : host.label + " (copy)",
+            hostName: host.hostName,
+            user: host.user,
+            port: host.port,
+            identityFile: host.identityFile,
+            proxyJump: host.proxyJump,
+            forwardAgent: host.forwardAgent,
+            icon: host.icon,
+            sftpPath: host.sftpPath,
+            sshInitPath: host.sshInitPath,
+            extraOptions: host.extraOptions,
+            comment: host.comment
+        )
+        remoteSession.addHost(copy)
+        for i in remoteSession.groups.indices {
+            if remoteSession.groups[i].hostIDs.contains(host.host) {
+                remoteSession.groups[i].hostIDs.append(copy.host)
+            }
+        }
+        remoteSession.saveRemoteGroups()
+        remoteSession.editingHost = copy
+    }
+
+    private func pasteToRemote(ontoGroupOf rightClickedHost: SSHHost?) {
+        let existing = Set(remoteSession.hosts.map(\.host))
+        let toAdd = hostClipboard.prepareForPaste(existingAliases: existing)
+        for h in toAdd { remoteSession.addHost(h) }
+        if let rightClickedHost,
+           let idx = remoteSession.groups.firstIndex(where: { $0.hostIDs.contains(rightClickedHost.host) }) {
+            for h in toAdd { remoteSession.groups[idx].hostIDs.append(h.host) }
+            remoteSession.saveRemoteGroups()
+        }
+    }
+
+    private var selectedHosts: [SSHHost] {
+        remoteSession.hosts.filter { selectedHostIDs.contains($0.id) }
+    }
+
+    private func performCopy() {
+        let copyTargets = selectedHosts.filter { !$0.isWildcard }
+        if !copyTargets.isEmpty { hostClipboard.copy(copyTargets) }
+    }
+
+    private func performPaste() {
+        guard hostClipboard.hasContent else { return }
+        let target = selectedHosts.count == 1 ? selectedHosts.first : nil
+        pasteToRemote(ontoGroupOf: target)
+    }
+
+    private func performDelete() {
+        guard !selectedHosts.isEmpty else { return }
+        hostsToDelete = selectedHosts
+        showDeleteConfirm = true
+    }
+
+    private func performDuplicate() {
+        guard selectedHosts.count == 1, let host = selectedHosts.first, !host.isWildcard else { return }
+        duplicateRemoteHost(host)
+    }
+
+    @ViewBuilder
+    private var hostListKeyboardShortcuts: some View {
+        Group {
+            Button("Copy", action: performCopy)
+                .keyboardShortcut("c", modifiers: .command)
+            Button("Paste", action: performPaste)
+                .keyboardShortcut("v", modifiers: .command)
+            Button("Delete", action: performDelete)
+                .keyboardShortcut(.delete, modifiers: [])
+            Button("Duplicate", action: performDuplicate)
+                .keyboardShortcut("d", modifiers: .command)
+        }
+        .frame(width: 0, height: 0).opacity(0).allowsHitTesting(false)
     }
 
     private var sortedKeys: [SSHKeyInfo] {

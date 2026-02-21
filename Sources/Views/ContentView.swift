@@ -125,7 +125,8 @@ struct ContentView: View {
         case .hosts:
             SidebarView(searchText: $searchText, showingAddHost: $showingAddHost, addHostGroupID: $addHostGroupID,
                          onEdit: { showingAddHost = false; editingHost = $0 },
-                         onConnect: { TerminalService.connect(to: $0) })
+                         onConnect: { TerminalService.connect(to: $0) },
+                         onDuplicate: { showingAddHost = false; editingHost = $0 })
         case .remotes:
             RemotesView(remoteSession: remoteSession)
         case .keys: KeyManagementView(isInline: true)

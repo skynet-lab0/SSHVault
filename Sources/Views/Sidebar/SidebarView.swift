@@ -3,16 +3,18 @@ import AppKit
 
 struct SidebarView: View {
     @EnvironmentObject var configService: SSHConfigService
+    @EnvironmentObject var hostClipboard: HostClipboardService
     @ObservedObject private var tm = ThemeManager.shared
     @Binding var searchText: String
     @Binding var showingAddHost: Bool
     @Binding var addHostGroupID: UUID?
     var onEdit: ((SSHHost) -> Void)?
     var onConnect: ((SSHHost) -> Void)?
+    var onDuplicate: ((SSHHost) -> Void)?
 
     @State private var showingAddGroup = false
     @State private var newGroupName = ""
-    @State private var hostToDelete: SSHHost?
+    @State private var hostsToDelete: [SSHHost] = []
     @State private var showDeleteConfirm = false
     @State private var groupToRename: HostGroup?
     @State private var renameGroupName = ""
@@ -88,6 +90,7 @@ struct SidebarView: View {
             .padding(.horizontal, 16).padding(.vertical, 6)
         }
         .background(t.background)
+        .overlay(hostListKeyboardShortcuts)
         .alert("New Group", isPresented: $showingAddGroup) {
             TextField("Group name", text: $newGroupName)
             Button("Cancel", role: .cancel) { newGroupName = "" }
@@ -121,14 +124,18 @@ struct SidebarView: View {
                 Text("Are you sure you want to delete \"\(group.name)\"? Hosts in this group will become ungrouped.")
             }
         }
-        .alert("Delete Host?", isPresented: $showDeleteConfirm) {
-            Button("Cancel", role: .cancel) {}
+        .alert(hostsToDelete.count > 1 ? "Delete \(hostsToDelete.count) Hosts?" : "Delete Host?", isPresented: $showDeleteConfirm) {
+            Button("Cancel", role: .cancel) { hostsToDelete = [] }
             Button("Delete", role: .destructive) {
-                if let host = hostToDelete { configService.deleteHost(host) }
+                for host in hostsToDelete { configService.deleteHost(host) }
+                hostsToDelete = []
+                selectedHostIDs.removeAll()
             }
         } message: {
-            if let host = hostToDelete {
+            if hostsToDelete.count == 1, let host = hostsToDelete.first {
                 Text("Are you sure you want to delete \"\(host.displayName)\"? This will update your SSH config file.")
+            } else if hostsToDelete.count > 1 {
+                Text("Are you sure you want to delete \(hostsToDelete.count) hosts? This will update your SSH config file.")
             }
         }
     }
@@ -282,6 +289,20 @@ struct SidebarView: View {
                     }
                 }
                 Button { onEdit?(host) } label: { Label("Edit", systemImage: "pencil") }
+                if !host.isWildcard {
+                    Button { duplicateHost(host) } label: { Label("Duplicate", systemImage: "doc.on.doc") }
+                }
+                let copyTargets = contextMenuTargets.filter { !$0.isWildcard }
+                if !copyTargets.isEmpty {
+                    Button { hostClipboard.copy(copyTargets) } label: {
+                        Label(copyTargets.count > 1 ? "Copy (\(copyTargets.count) hosts)" : "Copy", systemImage: "doc.on.clipboard")
+                    }
+                }
+                if hostClipboard.hasContent {
+                    Button { pasteToLocal(ontoGroupOf: host) } label: {
+                        Label(hostClipboard.hosts.count > 1 ? "Paste (\(hostClipboard.hosts.count) hosts)" : "Paste", systemImage: "doc.on.clipboard.fill")
+                    }
+                }
                 if !host.identityFile.isEmpty && !host.isWildcard {
                     Button { TerminalService.copyKeyToHost(host, keyPath: host.identityFile) } label: {
                         Label("Copy Public Key to Server", systemImage: "paperplane.fill")
@@ -304,8 +325,11 @@ struct SidebarView: View {
                     }
                 }
                 Divider()
-                Button(role: .destructive) { hostToDelete = host; showDeleteConfirm = true } label: {
-                    Label("Delete", systemImage: "trash")
+                Button(role: .destructive) {
+                    hostsToDelete = contextMenuTargets
+                    showDeleteConfirm = true
+                } label: {
+                    Label(contextMenuTargets.count > 1 ? "Delete (\(contextMenuTargets.count) hosts)" : "Delete", systemImage: "trash")
                 }
             }
     }
@@ -334,6 +358,93 @@ struct SidebarView: View {
     func removeHostFromGroups(_ host: SSHHost) {
         for i in configService.groups.indices { configService.groups[i].hostIDs.removeAll { $0 == host.host } }
         configService.saveGroups()
+    }
+
+    private func duplicateHost(_ host: SSHHost) {
+        guard !host.isWildcard else { return }
+        let taken = Set(configService.hosts.map(\.host))
+        var alias = host.host.isEmpty ? "copy" : host.host + "-copy"
+        var counter = 2
+        while taken.contains(alias) {
+            alias = (host.host.isEmpty ? "copy" : host.host + "-copy") + "-\(counter)"
+            counter += 1
+        }
+        let copy = SSHHost(
+            id: UUID(),
+            host: SSHConfig.sanitizeAlias(alias),
+            label: host.label.isEmpty ? alias : host.label + " (copy)",
+            hostName: host.hostName,
+            user: host.user,
+            port: host.port,
+            identityFile: host.identityFile,
+            proxyJump: host.proxyJump,
+            forwardAgent: host.forwardAgent,
+            icon: host.icon,
+            sftpPath: host.sftpPath,
+            sshInitPath: host.sshInitPath,
+            extraOptions: host.extraOptions,
+            comment: host.comment
+        )
+        configService.addHost(copy)
+        for i in configService.groups.indices {
+            if configService.groups[i].hostIDs.contains(host.host) {
+                configService.groups[i].hostIDs.append(copy.host)
+            }
+        }
+        configService.saveGroups()
+        onDuplicate?(copy)
+    }
+
+    private func pasteToLocal(ontoGroupOf rightClickedHost: SSHHost?) {
+        let existing = Set(configService.hosts.map(\.host))
+        let toAdd = hostClipboard.prepareForPaste(existingAliases: existing)
+        for h in toAdd { configService.addHost(h) }
+        if let rightClickedHost,
+           let idx = configService.groups.firstIndex(where: { $0.hostIDs.contains(rightClickedHost.host) }) {
+            for h in toAdd { configService.groups[idx].hostIDs.append(h.host) }
+            configService.saveGroups()
+        }
+    }
+
+    private var selectedHosts: [SSHHost] {
+        configService.hosts.filter { selectedHostIDs.contains($0.id) }
+    }
+
+    private func performCopy() {
+        let copyTargets = selectedHosts.filter { !$0.isWildcard }
+        if !copyTargets.isEmpty { hostClipboard.copy(copyTargets) }
+    }
+
+    private func performPaste() {
+        guard hostClipboard.hasContent else { return }
+        let target = selectedHosts.count == 1 ? selectedHosts.first : nil
+        pasteToLocal(ontoGroupOf: target)
+    }
+
+    private func performDelete() {
+        guard !selectedHosts.isEmpty else { return }
+        hostsToDelete = selectedHosts
+        showDeleteConfirm = true
+    }
+
+    private func performDuplicate() {
+        guard selectedHosts.count == 1, let host = selectedHosts.first, !host.isWildcard else { return }
+        duplicateHost(host)
+    }
+
+    @ViewBuilder
+    private var hostListKeyboardShortcuts: some View {
+        Group {
+            Button("Copy", action: performCopy)
+                .keyboardShortcut("c", modifiers: .command)
+            Button("Paste", action: performPaste)
+                .keyboardShortcut("v", modifiers: .command)
+            Button("Delete", action: performDelete)
+                .keyboardShortcut(.delete, modifiers: [])
+            Button("Duplicate", action: performDuplicate)
+                .keyboardShortcut("d", modifiers: .command)
+        }
+        .frame(width: 0, height: 0).opacity(0).allowsHitTesting(false)
     }
 }
 

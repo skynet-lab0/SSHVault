@@ -5,6 +5,7 @@ import AppKit
 struct SSHVaultApp: App {
     @StateObject private var configService = SSHConfigService()
     @StateObject private var remoteSession = RemoteSessionService()
+    @StateObject private var hostClipboard = HostClipboardService()
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {
@@ -12,6 +13,7 @@ struct SSHVaultApp: App {
             ContentView()
                 .environmentObject(configService)
                 .environmentObject(remoteSession)
+                .environmentObject(hostClipboard)
                 .frame(minWidth: 850, minHeight: 450)
         }
         .windowStyle(.titleBar)
