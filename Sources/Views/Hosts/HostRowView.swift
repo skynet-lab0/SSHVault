@@ -1,18 +1,23 @@
 import SwiftUI
+import AppKit
 
 struct HostRowView: View {
     let host: SSHHost
     var isSelected: Bool = false
     var onEdit: (() -> Void)?
     var onConnect: (() -> Void)?
+    /// When set, single/double tap on the left part (icon+text) triggers these; edit button is not covered.
+    var onSingleClick: ((NSEvent.ModifierFlags) -> Void)?
+    var onDoubleClick: (() -> Void)?
 
     @ObservedObject private var tm = ThemeManager.shared
     @ObservedObject private var prefs = TerminalPreferences.shared
     @State private var isHovered = false
+    @State private var singleTapWork: DispatchWorkItem?
     private var t: AppTheme { tm.current }
 
-    var body: some View {
-        HStack(spacing: 10) {
+    private var leftContent: some View {
+        HStack(spacing: 8) {
             ZStack {
                 RoundedRectangle(cornerRadius: 8)
                     .fill(host.isWildcard
@@ -41,20 +46,44 @@ struct HostRowView: View {
             }
 
             Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+    }
 
-            if isHovered, let onEdit {
+    var body: some View {
+        HStack(spacing: 10) {
+            if onSingleClick != nil || onDoubleClick != nil {
+                leftContent
+                    .onTapGesture(count: 2) {
+                        singleTapWork?.cancel()
+                        singleTapWork = nil
+                        onDoubleClick?()
+                    }
+                    .onTapGesture(count: 1) {
+                        guard let onSingleClick else { return }
+                        let flags = NSEvent.modifierFlags
+                        singleTapWork?.cancel()
+                        let work = DispatchWorkItem { onSingleClick(flags) }
+                        singleTapWork = work
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: work)
+                    }
+            } else {
+                leftContent
+            }
+
+            if let onEdit {
                 Button(action: onEdit) {
                     ZStack {
                         RoundedRectangle(cornerRadius: 6)
-                            .fill(t.accent.opacity(0.2))
+                            .fill(isHovered ? t.accent.opacity(0.2) : t.surface.opacity(0.6))
                             .frame(width: 26, height: 26)
                         Image(systemName: "pencil")
                             .font(.system(size: 10.5, weight: .semibold))
-                            .foregroundColor(t.accent)
+                            .foregroundColor(isHovered ? t.accent : t.secondary)
                     }
                 }
                 .buttonStyle(.plain)
-                .transition(.scale(scale: 0.85).combined(with: .opacity))
                 .help("Edit host")
             }
         }
@@ -81,7 +110,7 @@ struct HostRowView: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("SSH Host \(host.displayName)")
-        .accessibilityHint("Double click to connect. Hold Command or Control and click to multi-select.")
+        .accessibilityHint("Click Edit to edit, double-click to connect. Hold Command or Control and click to multi-select.")
         .accessibilityAction(.default) { onConnect?() }
     }
 

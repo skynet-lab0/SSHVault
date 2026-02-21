@@ -278,8 +278,25 @@ struct SidebarView: View {
             ? configService.hosts.filter { selectedHostIDs.contains($0.id) }
             : [host]
 
-        return HostRowView(host: host, isSelected: isSelected, onEdit: { onEdit?(host) }, onConnect: { onConnect?(host) })
-            .modifier(HostTileClickModifier(hostID: host.id, selectedHostIDs: $selectedHostIDs, onDoubleClick: { onConnect?(host) }, onSingleClickHost: { onHostSingleClick?(host) }))
+        return HostRowView(
+            host: host,
+            isSelected: isSelected,
+            onEdit: { selectedHostIDs = [host.id]; onEdit?(host) },
+            onConnect: { onConnect?(host) },
+            onSingleClick: { flags in
+                if flags.contains(.command) || flags.contains(.control) {
+                    if selectedHostIDs.contains(host.id) {
+                        selectedHostIDs.remove(host.id)
+                    } else {
+                        selectedHostIDs.insert(host.id)
+                    }
+                } else {
+                    selectedHostIDs = [host.id]
+                    onHostSingleClick?(host)
+                }
+            },
+            onDoubleClick: { onConnect?(host) }
+        )
             .draggable(host.host)
             .help("Click to select, ⌘/Ctrl+click to multi-select, double-click to connect")
             .contextMenu {
@@ -289,7 +306,7 @@ struct SidebarView: View {
                         Label("SFTP", systemImage: "folder.badge.gearshape")
                     }
                 }
-                Button { onEdit?(host) } label: { Label("Edit", systemImage: "pencil") }
+                Button { selectedHostIDs = [host.id]; onEdit?(host) } label: { Label("Edit", systemImage: "pencil") }
                 if !host.isWildcard {
                     Button { duplicateHost(host) } label: { Label("Duplicate", systemImage: "doc.on.doc") }
                 }
@@ -446,72 +463,5 @@ struct SidebarView: View {
                 .keyboardShortcut("d", modifiers: .command)
         }
         .frame(width: 0, height: 0).opacity(0).allowsHitTesting(false)
-    }
-}
-
-// MARK: - Multi-select click capture (Cmd/Ctrl+click)
-
-struct HostTileClickModifier: ViewModifier {
-    let hostID: UUID
-    @Binding var selectedHostIDs: Set<UUID>
-    let onDoubleClick: () -> Void
-    var onSingleClickHost: (() -> Void)? = nil
-
-    func body(content: Content) -> some View {
-        content.overlay(
-            MacClickCaptureView(
-                onSingleClick: { flags in
-                    if flags.contains(.command) || flags.contains(.control) {
-                        if selectedHostIDs.contains(hostID) {
-                            selectedHostIDs.remove(hostID)
-                        } else {
-                            selectedHostIDs.insert(hostID)
-                        }
-                    } else {
-                        selectedHostIDs = [hostID]
-                        onSingleClickHost?()
-                    }
-                },
-                onDoubleClick: onDoubleClick
-            )
-            .allowsHitTesting(true)
-        )
-    }
-}
-
-struct MacClickCaptureView: NSViewRepresentable {
-    var onSingleClick: (NSEvent.ModifierFlags) -> Void
-    var onDoubleClick: () -> Void
-
-    func makeNSView(context: Context) -> ClickCaptureNSView {
-        let v = ClickCaptureNSView()
-        v.onSingleClick = onSingleClick
-        v.onDoubleClick = onDoubleClick
-        return v
-    }
-
-    func updateNSView(_ nsView: ClickCaptureNSView, context: Context) {
-        nsView.onSingleClick = onSingleClick
-        nsView.onDoubleClick = onDoubleClick
-    }
-
-    class ClickCaptureNSView: NSView {
-        var onSingleClick: ((NSEvent.ModifierFlags) -> Void)?
-        var onDoubleClick: (() -> Void)?
-
-        override func updateTrackingAreas() {
-            super.updateTrackingAreas()
-            if trackingAreas.isEmpty {
-                addTrackingArea(NSTrackingArea(rect: bounds, options: [.activeAlways, .mouseEnteredAndExited, .inVisibleRect], owner: self, userInfo: nil))
-            }
-        }
-
-        override func mouseDown(with event: NSEvent) {
-            if event.clickCount == 2 {
-                onDoubleClick?()
-            } else if event.clickCount == 1 {
-                onSingleClick?(event.modifierFlags)
-            }
-        }
     }
 }

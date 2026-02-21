@@ -306,14 +306,29 @@ struct RemoteDetailView: View {
             ? remoteSession.hosts.filter { selectedHostIDs.contains($0.id) }
             : [host]
 
-        return HostRowView(host: host, isSelected: isSelected, onEdit: { remoteSession.requestEditHost(host) }, onConnect: { connectToHostOnRemote(host) })
-            .modifier(HostTileClickModifier(hostID: host.id, selectedHostIDs: $selectedHostIDs, onDoubleClick: { connectToHostOnRemote(host) }, onSingleClickHost: {
-            if remoteSession.editingHost != nil { remoteSession.requestEditHost(host) }
-        }))
+        return HostRowView(
+            host: host,
+            isSelected: isSelected,
+            onEdit: { selectedHostIDs = [host.id]; remoteSession.requestEditHost(host) },
+            onConnect: { connectToHostOnRemote(host) },
+            onSingleClick: { flags in
+                if flags.contains(.command) || flags.contains(.control) {
+                    if selectedHostIDs.contains(host.id) {
+                        selectedHostIDs.remove(host.id)
+                    } else {
+                        selectedHostIDs.insert(host.id)
+                    }
+                } else {
+                    selectedHostIDs = [host.id]
+                    if remoteSession.editingHost != nil { remoteSession.requestEditHost(host) }
+                }
+            },
+            onDoubleClick: { connectToHostOnRemote(host) }
+        )
             .draggable(host.host)
             .contextMenu {
                 Button { connectToHostOnRemote(host) } label: { Label("Connect", systemImage: "terminal") }
-                Button { remoteSession.requestEditHost(host) } label: { Label("Edit", systemImage: "pencil") }
+                Button { selectedHostIDs = [host.id]; remoteSession.requestEditHost(host) } label: { Label("Edit", systemImage: "pencil") }
                 if !host.isWildcard {
                     Button { duplicateRemoteHost(host) } label: { Label("Duplicate", systemImage: "doc.on.doc") }
                 }
