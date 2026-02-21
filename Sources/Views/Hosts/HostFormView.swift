@@ -10,6 +10,8 @@ struct HostFormView: View {
     let groups: [HostGroup]
     let onSave: (SSHHost, UUID?) -> Void
     var onCancel: (() -> Void)?
+    var isDirty: Binding<Bool>?
+    var onRegisterSaveHandler: ((@escaping () -> Void) -> Void)?
 
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var tm = ThemeManager.shared
@@ -37,11 +39,13 @@ struct HostFormView: View {
     private var t: AppTheme { tm.current }
     private var existingID: UUID?
 
-    init(mode: Mode, groups: [HostGroup] = [], initialGroupID: UUID? = nil, onSave: @escaping (SSHHost, UUID?) -> Void, onCancel: (() -> Void)? = nil) {
+    init(mode: Mode, groups: [HostGroup] = [], initialGroupID: UUID? = nil, onSave: @escaping (SSHHost, UUID?) -> Void, onCancel: (() -> Void)? = nil, isDirty: Binding<Bool>? = nil, onRegisterSaveHandler: ((@escaping () -> Void) -> Void)? = nil) {
         self.mode = mode
         self.groups = groups
         self.onSave = onSave
         self.onCancel = onCancel
+        self.isDirty = isDirty
+        self.onRegisterSaveHandler = onRegisterSaveHandler
 
         _selectedGroupID = State(initialValue: initialGroupID)
 
@@ -88,6 +92,89 @@ struct HostFormView: View {
         case .add: return "Add Host"
         case .edit: return "Edit Host"
         }
+    }
+
+    private var initialHost: SSHHost? {
+        if case .edit(let h) = mode { return h }
+        return nil
+    }
+
+    private func currentHostFromForm() -> SSHHost {
+        let port: Int? = portString.nilIfEmpty.flatMap { Int($0) }
+        var extras: [String: String] = [:]
+        for line in extraOptionsText.components(separatedBy: .newlines) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.isEmpty { continue }
+            let parts = trimmed.split(separator: " ", maxSplits: 1)
+            if parts.count == 2 { extras[String(parts[0])] = String(parts[1]) }
+        }
+        var formattedComment = comment.trimmingCharacters(in: .whitespaces)
+        if !formattedComment.isEmpty && !formattedComment.hasPrefix("#") { formattedComment = "# " + formattedComment }
+        let trimmedName = name.trimmingCharacters(in: .whitespaces)
+        return SSHHost(
+            id: existingID ?? UUID(),
+            host: SSHConfig.sanitizeAlias(trimmedName),
+            label: trimmedName,
+            hostName: hostName.trimmingCharacters(in: .whitespaces),
+            user: user.trimmingCharacters(in: .whitespaces),
+            port: port,
+            identityFile: identityFile.trimmingCharacters(in: .whitespaces),
+            proxyJump: proxyJump.trimmingCharacters(in: .whitespaces),
+            forwardAgent: forwardAgent,
+            icon: selectedIcon,
+            sftpPath: sftpPath.trimmingCharacters(in: .whitespaces),
+            sshInitPath: sshInitPath,
+            extraOptions: extras,
+            comment: formattedComment
+        )
+    }
+
+    private var terminalOverrideDirty: Bool {
+        guard let initial = initialHost else { return false }
+        let initialOverride = terminalPrefs.hostOverrides[initial.host]
+        let initialUseDefault = initialOverride == nil
+        let initialTerminal = initialOverride?.terminal ?? .ghostty
+        let initialPath = initialOverride?.customAppPath ?? ""
+        if useDefaultTerminal != initialUseDefault { return true }
+        if !useDefaultTerminal && (selectedTerminal != initialTerminal || (selectedTerminal == .custom ? customTerminalPath : "") != initialPath) { return true }
+        return false
+    }
+
+    /// Compare form state to initial host using the same mapping as form display (avoid sanitizeAlias mismatch: name shows label but saved host can differ).
+    private var isDirtyValue: Bool {
+        guard let initial = initialHost else { return false }
+        let nameDisplay = name.trimmingCharacters(in: .whitespaces)
+        let initialNameDisplay = initial.label.isEmpty ? initial.host : initial.label
+        if nameDisplay != initialNameDisplay { return true }
+        if hostName.trimmingCharacters(in: .whitespaces) != initial.hostName { return true }
+        if user.trimmingCharacters(in: .whitespaces) != initial.user { return true }
+        let portStr = portString.trimmingCharacters(in: .whitespaces)
+        let initialPortStr = initial.port.map(String.init) ?? ""
+        if portStr != initialPortStr { return true }
+        if identityFile.trimmingCharacters(in: .whitespaces) != initial.identityFile { return true }
+        if proxyJump.trimmingCharacters(in: .whitespaces) != initial.proxyJump { return true }
+        if forwardAgent != initial.forwardAgent { return true }
+        if selectedIcon != initial.icon { return true }
+        if sftpPath.trimmingCharacters(in: .whitespaces) != initial.sftpPath { return true }
+        if sshInitPath != initial.sshInitPath { return true }
+        if comment.trimmingCharacters(in: .whitespaces) != initial.comment.trimmingCharacters(in: .whitespaces) { return true }
+        var formExtras: [String: String] = [:]
+        for line in extraOptionsText.components(separatedBy: .newlines) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.isEmpty { continue }
+            let parts = trimmed.split(separator: " ", maxSplits: 1)
+            if parts.count == 2 { formExtras[String(parts[0])] = String(parts[1]) }
+        }
+        if formExtras != initial.extraOptions { return true }
+        return terminalOverrideDirty
+    }
+
+    private var formSignature: String {
+        "\(name)|\(hostName)|\(user)|\(portString)|\(identityFile)|\(proxyJump)|\(sftpPath)|\(sshInitPath)|\(forwardAgent)|\(selectedIcon)|\(comment)|\(extraOptionsText)|\(useDefaultTerminal)|\(selectedTerminal.rawValue)|\(customTerminalPath)|\(selectedGroupID?.uuidString ?? "")"
+    }
+
+    private func updateDirtyBinding() {
+        isDirty?.wrappedValue = isDirtyValue
     }
 
     var body: some View {
@@ -323,6 +410,11 @@ struct HostFormView: View {
         .task {
             availableKeys = SSHKeyService.shared.listKeys()
         }
+        .onAppear {
+            onRegisterSaveHandler?(saveHost)
+            updateDirtyBinding()
+        }
+        .onChange(of: formSignature) { _ in updateDirtyBinding() }
     }
 
     private func cancelAction() {

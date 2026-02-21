@@ -18,6 +18,14 @@ final class RemoteSessionService: ObservableObject {
     @Published var showingAddHost = false
 
     private weak var configService: SSHConfigService?
+    /// When set, edit requests (e.g. clicking another host) go through this instead of setting editingHost directly.
+    var onRequestEditHost: ((SSHHost) -> Void)?
+    /// Updated by the edit form so the request-edit callback can read current dirty state without stale capture.
+    @Published var remoteEditFormDirty = false
+    var remoteEditFormSaveHandler: (() -> Void)?
+    /// When user tries to switch host with dirty form; alert is shown and this is the target host.
+    @Published var pendingRemoteEditHost: SSHHost?
+    @Published var showUnsavedRemoteEditAlert = false
 
     init() {
         remoteTargets = RemoteTarget.loadAll()
@@ -136,6 +144,15 @@ final class RemoteSessionService: ObservableObject {
     func saveRemoteGroups() {
         guard let target = currentRemote else { return }
         HostGroup.saveAll(groups, to: RemoteTarget.groupsURL(for: target.id))
+    }
+
+    /// Call when user selects a host to edit; respects onRequestEditHost so parent can prompt for unsaved changes.
+    func requestEditHost(_ host: SSHHost) {
+        if let cb = onRequestEditHost {
+            cb(host)
+        } else {
+            editingHost = host
+        }
     }
 
     // MARK: - Host CRUD (in-memory + write back)

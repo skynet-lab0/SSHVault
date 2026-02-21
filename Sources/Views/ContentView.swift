@@ -20,6 +20,10 @@ struct ContentView: View {
     @State private var showingTermiusImport = false
     @State private var showingAbout = false
     @State private var exportDocument: SSHConfigDocument?
+    @State private var pendingEditHost: SSHHost?
+    @State private var showUnsavedEditAlert = false
+    @State private var isEditFormDirty = false
+    @State private var editFormSaveHandler: (() -> Void)?
 
     private var t: AppTheme { tm.current }
     private var showRightPanel: Bool {
@@ -44,11 +48,53 @@ struct ContentView: View {
         .preferredColorScheme(t.isDark ? .dark : .light)
         .animation(.easeInOut(duration: 0.2), value: showRightPanel)
         .animation(.easeInOut(duration: 0.2), value: editingHost?.id)
-        .onAppear { remoteSession.configure(configService: configService) }
+        .onAppear {
+            remoteSession.configure(configService: configService)
+            setRemoteEditRequestHandler()
+        }
+        .onChange(of: selectedNav) { _ in setRemoteEditRequestHandler() }
         .sheet(isPresented: $showingTermiusImport) { TermiusImportView() }
         .sheet(isPresented: $showingAbout) { AboutView() }
         .fileImporter(isPresented: $showingImport, allowedContentTypes: [.plainText, .data], allowsMultipleSelection: false) { handleImport($0) }
         .fileExporter(isPresented: $showingExport, document: exportDocument ?? SSHConfigDocument(content: ""), contentType: .plainText, defaultFilename: "ssh_config") { _ in exportDocument = nil }
+        .alert("Save changes?", isPresented: $showUnsavedEditAlert) {
+            Button("Save", role: nil) {
+                editFormSaveHandler?()
+                editingHost = pendingEditHost
+                pendingEditHost = nil
+                showUnsavedEditAlert = false
+            }
+            Button("Don't Save", role: .destructive) {
+                editingHost = pendingEditHost
+                pendingEditHost = nil
+                showUnsavedEditAlert = false
+            }
+            Button("Cancel", role: .cancel) {
+                pendingEditHost = nil
+                showUnsavedEditAlert = false
+            }
+        } message: {
+            Text("Save changes to \"\(editingHost?.displayName ?? "this host")\" before switching?")
+        }
+        .alert("Save changes?", isPresented: Binding(get: { remoteSession.showUnsavedRemoteEditAlert }, set: { remoteSession.showUnsavedRemoteEditAlert = $0 })) {
+            Button("Save", role: nil) {
+                remoteSession.remoteEditFormSaveHandler?()
+                remoteSession.editingHost = remoteSession.pendingRemoteEditHost
+                remoteSession.pendingRemoteEditHost = nil
+                remoteSession.showUnsavedRemoteEditAlert = false
+            }
+            Button("Don't Save", role: .destructive) {
+                remoteSession.editingHost = remoteSession.pendingRemoteEditHost
+                remoteSession.pendingRemoteEditHost = nil
+                remoteSession.showUnsavedRemoteEditAlert = false
+            }
+            Button("Cancel", role: .cancel) {
+                remoteSession.pendingRemoteEditHost = nil
+                remoteSession.showUnsavedRemoteEditAlert = false
+            }
+        } message: {
+            Text("Save changes to \"\(remoteSession.editingHost?.displayName ?? "this host")\" before switching?")
+        }
     }
 
     // MARK: - Icon Rail
@@ -124,7 +170,25 @@ struct ContentView: View {
         switch selectedNav {
         case .hosts:
             SidebarView(searchText: $searchText, showingAddHost: $showingAddHost, addHostGroupID: $addHostGroupID,
-                         onEdit: { showingAddHost = false; editingHost = $0 },
+                         onEdit: { host in
+                             showingAddHost = false
+                             if let current = editingHost, current.id != host.id, isEditFormDirty {
+                                 pendingEditHost = host
+                                 showUnsavedEditAlert = true
+                             } else {
+                                 editingHost = host
+                             }
+                         },
+                         onHostSingleClick: { host in
+                             guard editingHost != nil else { return }
+                             showingAddHost = false
+                             if let current = editingHost, current.id != host.id, isEditFormDirty {
+                                 pendingEditHost = host
+                                 showUnsavedEditAlert = true
+                             } else {
+                                 editingHost = host
+                             }
+                         },
                          onConnect: { TerminalService.connect(to: $0) },
                          onDuplicate: { showingAddHost = false; editingHost = $0 })
         case .remotes:
@@ -161,13 +225,15 @@ struct ContentView: View {
                 }
             } else if let host = editingHost {
                 let currentGroupID = configService.groups.first { $0.hostIDs.contains(host.host) }?.id
-                HostFormView(mode: .edit(host), groups: configService.groups, initialGroupID: currentGroupID) { updatedHost, groupID in
-                    configService.updateHost(updatedHost)
-                    assignHost(updatedHost, toGroup: groupID)
-                    editingHost = nil
-                } onCancel: {
-                    editingHost = nil
-                }
+                HostFormView(mode: .edit(host), groups: configService.groups, initialGroupID: currentGroupID,
+                            onSave: { updatedHost, groupID in
+                                configService.updateHost(updatedHost)
+                                assignHost(updatedHost, toGroup: groupID)
+                                editingHost = nil
+                            },
+                            onCancel: { editingHost = nil },
+                            isDirty: $isEditFormDirty,
+                            onRegisterSaveHandler: { editFormSaveHandler = $0 })
             }
         }
     }
@@ -185,13 +251,15 @@ struct ContentView: View {
                 }
             } else if let host = remoteSession.editingHost {
                 let currentGroupID = remoteSession.groups.first { $0.hostIDs.contains(host.host) }?.id
-                HostFormView(mode: .edit(host), groups: remoteSession.groups, initialGroupID: currentGroupID) { updatedHost, groupID in
-                    remoteSession.updateHost(updatedHost)
-                    assignRemoteHost(updatedHost, toGroup: groupID)
-                    remoteSession.editingHost = nil
-                } onCancel: {
-                    remoteSession.editingHost = nil
-                }
+                HostFormView(mode: .edit(host), groups: remoteSession.groups, initialGroupID: currentGroupID,
+                            onSave: { updatedHost, groupID in
+                                remoteSession.updateHost(updatedHost)
+                                assignRemoteHost(updatedHost, toGroup: groupID)
+                                remoteSession.editingHost = nil
+                            },
+                            onCancel: { remoteSession.editingHost = nil },
+                            isDirty: Binding(get: { remoteSession.remoteEditFormDirty }, set: { remoteSession.remoteEditFormDirty = $0 }),
+                            onRegisterSaveHandler: { remoteSession.remoteEditFormSaveHandler = $0 })
             }
         }
     }
@@ -202,6 +270,21 @@ struct ContentView: View {
             remoteSession.groups[idx].hostIDs.append(host.host)
         }
         remoteSession.saveRemoteGroups()
+    }
+
+    private func setRemoteEditRequestHandler() {
+        if selectedNav == .remotes {
+            remoteSession.onRequestEditHost = { host in
+                if let current = remoteSession.editingHost, current.id != host.id, remoteSession.remoteEditFormDirty {
+                    remoteSession.pendingRemoteEditHost = host
+                    remoteSession.showUnsavedRemoteEditAlert = true
+                } else {
+                    remoteSession.editingHost = host
+                }
+            }
+        } else {
+            remoteSession.onRequestEditHost = nil
+        }
     }
 
     private func assignHost(_ host: SSHHost, toGroup groupID: UUID?) {

@@ -9,6 +9,7 @@ struct SidebarView: View {
     @Binding var showingAddHost: Bool
     @Binding var addHostGroupID: UUID?
     var onEdit: ((SSHHost) -> Void)?
+    var onHostSingleClick: ((SSHHost) -> Void)?
     var onConnect: ((SSHHost) -> Void)?
     var onDuplicate: ((SSHHost) -> Void)?
 
@@ -278,7 +279,7 @@ struct SidebarView: View {
             : [host]
 
         return HostRowView(host: host, isSelected: isSelected, onEdit: { onEdit?(host) }, onConnect: { onConnect?(host) })
-            .modifier(HostTileClickModifier(hostID: host.id, selectedHostIDs: $selectedHostIDs, onDoubleClick: { onConnect?(host) }))
+            .modifier(HostTileClickModifier(hostID: host.id, selectedHostIDs: $selectedHostIDs, onDoubleClick: { onConnect?(host) }, onSingleClickHost: { onHostSingleClick?(host) }))
             .draggable(host.host)
             .help("Click to select, ⌘/Ctrl+click to multi-select, double-click to connect")
             .contextMenu {
@@ -454,6 +455,7 @@ struct HostTileClickModifier: ViewModifier {
     let hostID: UUID
     @Binding var selectedHostIDs: Set<UUID>
     let onDoubleClick: () -> Void
+    var onSingleClickHost: (() -> Void)? = nil
 
     func body(content: Content) -> some View {
         content.overlay(
@@ -467,6 +469,7 @@ struct HostTileClickModifier: ViewModifier {
                         }
                     } else {
                         selectedHostIDs = [hostID]
+                        onSingleClickHost?()
                     }
                 },
                 onDoubleClick: onDoubleClick

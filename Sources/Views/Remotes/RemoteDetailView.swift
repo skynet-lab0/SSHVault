@@ -306,12 +306,14 @@ struct RemoteDetailView: View {
             ? remoteSession.hosts.filter { selectedHostIDs.contains($0.id) }
             : [host]
 
-        return HostRowView(host: host, isSelected: isSelected, onEdit: { remoteSession.editingHost = host }, onConnect: { connectToHostOnRemote(host) })
-            .modifier(HostTileClickModifier(hostID: host.id, selectedHostIDs: $selectedHostIDs, onDoubleClick: { connectToHostOnRemote(host) }))
+        return HostRowView(host: host, isSelected: isSelected, onEdit: { remoteSession.requestEditHost(host) }, onConnect: { connectToHostOnRemote(host) })
+            .modifier(HostTileClickModifier(hostID: host.id, selectedHostIDs: $selectedHostIDs, onDoubleClick: { connectToHostOnRemote(host) }, onSingleClickHost: {
+            if remoteSession.editingHost != nil { remoteSession.requestEditHost(host) }
+        }))
             .draggable(host.host)
             .contextMenu {
                 Button { connectToHostOnRemote(host) } label: { Label("Connect", systemImage: "terminal") }
-                Button { remoteSession.editingHost = host } label: { Label("Edit", systemImage: "pencil") }
+                Button { remoteSession.requestEditHost(host) } label: { Label("Edit", systemImage: "pencil") }
                 if !host.isWildcard {
                     Button { duplicateRemoteHost(host) } label: { Label("Duplicate", systemImage: "doc.on.doc") }
                 }
@@ -390,7 +392,7 @@ struct RemoteDetailView: View {
             }
         }
         remoteSession.saveRemoteGroups()
-        remoteSession.editingHost = copy
+        remoteSession.requestEditHost(copy)
     }
 
     private func pasteToRemote(ontoGroupOf rightClickedHost: SSHHost?) {
