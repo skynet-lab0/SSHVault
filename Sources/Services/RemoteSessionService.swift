@@ -121,8 +121,9 @@ final class RemoteSessionService: ObservableObject {
 
     func saveRemoteConfig() {
         guard let target = currentRemote, let sshHost = resolveHost(for: target) else { return }
+        // Snapshot hosts on main actor so the async Task sees the latest list (e.g. just-added host)
+        let content = SSHConfig.serialize(hosts: hosts)
         Task {
-            let content = SSHConfig.serialize(hosts: hosts)
             let result = await RemoteSSHService.writeConfig(host: sshHost, content: content)
             await MainActor.run {
                 if case .failure(let err) = result {

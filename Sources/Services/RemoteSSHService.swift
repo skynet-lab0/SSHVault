@@ -19,7 +19,8 @@ enum RemoteSSHService {
             DispatchQueue.global(qos: .userInitiated).async {
                 let process = Process()
                 process.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
-                process.arguments = [host.host, remoteCommand]
+                // Override RemoteCommand so our command runs (hosts with RemoteCommand in config would otherwise ignore the requested command)
+                process.arguments = ["-o", "RemoteCommand=none", host.host, remoteCommand]
 
                 let outPipe = Pipe()
                 let errPipe = Pipe()
@@ -29,9 +30,12 @@ enum RemoteSSHService {
                 if let data = stdinData {
                     let inPipe = Pipe()
                     process.standardInput = inPipe
-                    DispatchQueue.global(qos: .userInitiated).async {
-                        try? inPipe.fileHandleForWriting.write(contentsOf: data)
-                        try? inPipe.fileHandleForWriting.close()
+                    do {
+                        try inPipe.fileHandleForWriting.write(contentsOf: data)
+                        try inPipe.fileHandleForWriting.close()
+                    } catch {
+                        continuation.resume(returning: .failure(error))
+                        return
                     }
                 } else {
                     process.standardInput = FileHandle.nullDevice
