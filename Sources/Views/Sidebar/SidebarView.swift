@@ -12,6 +12,8 @@ struct SidebarView: View {
     var onHostSingleClick: ((SSHHost) -> Void)?
     var onConnect: ((SSHHost) -> Void)?
     var onDuplicate: ((SSHHost) -> Void)?
+    /// When false (e.g. Edit Host form is open), host list shortcuts are disabled so Cmd+V etc. reach the form.
+    var hostListShortcutsEnabled: Bool = true
 
     @State private var showingAddGroup = false
     @State private var newGroupName = ""
@@ -91,7 +93,7 @@ struct SidebarView: View {
             .padding(.horizontal, 16).padding(.vertical, 6)
         }
         .background(t.background)
-        .overlay(hostListKeyboardShortcuts)
+        .overlay { if hostListShortcutsEnabled { hostListKeyboardShortcuts } else { EmptyView() } }
         .alert("New Group", isPresented: $showingAddGroup) {
             TextField("Group name", text: $newGroupName)
             Button("Cancel", role: .cancel) { newGroupName = "" }
@@ -283,7 +285,7 @@ struct SidebarView: View {
             isSelected: isSelected,
             onEdit: { selectedHostIDs = [host.id]; onEdit?(host) },
             onConnect: { onConnect?(host) },
-            onSingleClick: { flags in
+            onSingleClickImmediate: { flags in
                 if flags.contains(.command) || flags.contains(.control) {
                     if selectedHostIDs.contains(host.id) {
                         selectedHostIDs.remove(host.id)
@@ -292,9 +294,9 @@ struct SidebarView: View {
                     }
                 } else {
                     selectedHostIDs = [host.id]
-                    onHostSingleClick?(host)
                 }
             },
+            onSingleClickDelayed: { onHostSingleClick?(host) },
             onDoubleClick: { onConnect?(host) }
         )
             .draggable(host.host)

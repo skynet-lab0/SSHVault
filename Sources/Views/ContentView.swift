@@ -190,7 +190,8 @@ struct ContentView: View {
                              }
                          },
                          onConnect: { TerminalService.connect(to: $0) },
-                         onDuplicate: { showingAddHost = false; editingHost = $0 })
+                         onDuplicate: { showingAddHost = false; editingHost = $0 },
+                         hostListShortcutsEnabled: editingHost == nil && !showingAddHost)
         case .remotes:
             RemotesView(remoteSession: remoteSession)
         case .keys: KeyManagementView(isInline: true)

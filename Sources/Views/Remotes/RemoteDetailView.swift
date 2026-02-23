@@ -48,7 +48,7 @@ struct RemoteDetailView: View {
             }
         }
         .background(t.background)
-        .overlay { if selectedSegment == 0 { hostListKeyboardShortcuts } else { EmptyView() } }
+        .overlay { if selectedSegment == 0 && remoteSession.editingHost == nil && !remoteSession.showingAddHost { hostListKeyboardShortcuts } else { EmptyView() } }
         .alert("New Group", isPresented: $showingAddGroup) {
             TextField("Group name", text: $newGroupName)
             Button("Cancel", role: .cancel) { newGroupName = "" }
@@ -311,7 +311,7 @@ struct RemoteDetailView: View {
             isSelected: isSelected,
             onEdit: { selectedHostIDs = [host.id]; remoteSession.requestEditHost(host) },
             onConnect: { connectToHostOnRemote(host) },
-            onSingleClick: { flags in
+            onSingleClickImmediate: { flags in
                 if flags.contains(.command) || flags.contains(.control) {
                     if selectedHostIDs.contains(host.id) {
                         selectedHostIDs.remove(host.id)
@@ -320,8 +320,10 @@ struct RemoteDetailView: View {
                     }
                 } else {
                     selectedHostIDs = [host.id]
-                    if remoteSession.editingHost != nil { remoteSession.requestEditHost(host) }
                 }
+            },
+            onSingleClickDelayed: {
+                if remoteSession.editingHost != nil { remoteSession.requestEditHost(host) }
             },
             onDoubleClick: { connectToHostOnRemote(host) }
         )
